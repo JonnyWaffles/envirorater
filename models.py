@@ -19,18 +19,21 @@ class ContractorClass(models.Model):
     return class_premium_ex_mold
   
   def get_mold_premium(self, class_revenue, revenue_band, mold_hazard_group = "low"):
-    class_premium_ex_mold = get_premium_ex_mold(self, class_revenue, revenue_band)
-    mold_hazard_group = MoldHazardGroup.objects.get(group__iexact = mold_hazard_group)
-    return class_mold_premium * mold_hazard_group.factor
+    class_premium_ex_mold = ContractorClass.get_premium_ex_mold(self, class_revenue, revenue_band)
+    mold_hazard_group = MoldHazardGroup.objects.get(hazard_group__iexact = mold_hazard_group)
+    return class_premium_ex_mold * mold_hazard_group.factor
   
   def get_total_premium(self, class_revenue, revenue_band, mold_hazard_group = "low"):
-    return get_premium_ex_mold(self, class_revenue, revenue_band) + get_mold_premium(self, class_revenue, revenue_band, mold_hazard_group = "low")
+    return ContractorClass.get_premium_ex_mold(self, class_revenue, revenue_band) + ContractorClass.get_mold_premium(self, class_revenue, revenue_band, mold_hazard_group = "low")
   
 class RevenueBand(models.Model):
   start = models.PositiveIntegerField()
   end = models.PositiveIntegerField()
   cumulative_premium = models.PositiveIntegerField()
   factor = models.DecimalField(max_digits = 4, decimal_places = 3)
+  
+  def __str__(self):
+    return "%s - %s Factor: %s" % (self.start, self.end, self.factor)
   
 class MoldHazardGroup(models.Model):
   hazard_group = models.CharField(max_length = 20)
