@@ -13,18 +13,20 @@ class ContractorClass(models.Model):
   def __str__(self):
     return "ISO Code: %s Description: %s" % (self.iso_code, self.iso_description)
   
-  def get_premium_ex_mold(self, class_revenue, revenue_band):
+  def get_premium_ex_mold(self, class_revenue = 0):
+    revenue_band = RevenueBand.objects.get(start__lt = class_revenue, end__gte = class_revenue)
     marginal_premium = (class_revenue - revenue_band.start) * revenue_band.factor / 1000
     class_premium_ex_mold = (revenue_band.cumulative_premium + marginal_premium) * self.class_relativity
     return class_premium_ex_mold
   
-  def get_mold_premium(self, class_revenue, revenue_band, mold_hazard_group = "low"):
-    class_premium_ex_mold = ContractorClass.get_premium_ex_mold(self, class_revenue, revenue_band)
+  def get_mold_premium(self, class_revenue = 0, mold_hazard_group = "low"):
+    revenue_band = RevenueBand.objects.get(start__lt = class_revenue, end__gte = class_revenue)
+    class_premium_ex_mold = ContractorClass.get_premium_ex_mold(self, class_revenue)
     mold_hazard_group = MoldHazardGroup.objects.get(hazard_group__iexact = mold_hazard_group)
     return class_premium_ex_mold * mold_hazard_group.factor
   
-  def get_total_premium(self, class_revenue, revenue_band, mold_hazard_group = "low"):
-    return ContractorClass.get_premium_ex_mold(self, class_revenue, revenue_band) + ContractorClass.get_mold_premium(self, class_revenue, revenue_band, mold_hazard_group = "low")
+  def get_total_premium(self, class_revenue = 0, mold_hazard_group = "low"):
+    return ContractorClass.get_premium_ex_mold(self, class_revenue) + ContractorClass.get_mold_premium(self, class_revenue, mold_hazard_group = "low")
   
 class RevenueBand(models.Model):
   start = models.PositiveIntegerField()

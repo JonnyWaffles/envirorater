@@ -14,7 +14,17 @@
   
   <body>
     
-    TESTESTEST
+    <table>
+      <tr>
+        <th>ISO Code</th>
+        <th>Description</th>
+      </tr>
+      {% for contractor in contractor_classes %}
+      <tr>
+        <td>{{ contractor.iso_code }}</td>
+        <td>{{ contractor.iso_description }}</td>
+      </tr>
+      {% endfor %}
     
   </body>
   
