@@ -9,10 +9,13 @@ from django.core import serializers
 from decimal import Decimal
 from .forms import ContractorClassForm
 from .models import ContractorClass, RevenueBand, MoldHazardGroup, Limit, Deductible, Aggregate, Nose
+#from .serializers import ContractorClassSerializer
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator
 from django.contrib.auth import logout
+from rest_framework.renderers import JSONRenderer
+from rest_framework.parsers import JSONParser
 
 # Create your views here.
 class ContractorBaseRate:
@@ -29,10 +32,10 @@ class ContractorBaseRate:
     return "ISO Code: %s Premium: %s" % (self.iso_code, self.premium)
 
 class Submission:  
-  def __init__(self, submission_data, type):     
-    self.type = type
+  def __init__(self, submission_data, sub_type):     
+    self.sub_type = sub_type
     self.contractor_classes = []
-    contractor_array = submission_data[type]['contractor_classes']
+    contractor_array = submission_data[sub_type]['contractor_classes']
     for contractor_data in contractor_array:
       c = ContractorBaseRate(**contractor_data)
       self.contractor_classes.append(c)
@@ -44,19 +47,19 @@ class Index(View):
     context = {"contractor_classes" : contractor_classes}    
     return render(request, 'envirorater/home.html', context)
 
-@method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(csrf_exempt, name='dispatch')  
 class ContractorBaseRateAPI(View):    
 #   Provide a GET request with iso_code, revenue, and mold_hazard_group
 #   Returns JsonResponse with contractor class key values
 #   Note need to use REST Framework to surprass the Cross Origin Problem
     
     def get(self, request, *args, **kwargs):
-      request_dictionary = request.GET.dict()
-      contractor_class = ContractorBaseRate(**request_dictionary)
-      return JsonResponse(contractor_class.__dict__)
+      contractor_classes = ContractorClass.objects.all()
+      #serializer = ContractorClassSerializer(contractor_classes, many=True)
+      return JsonResponse(serializer.data, safe=False)
     
     def post(self, request, *args, **kwargs):
-      submission_data = json.loads(request.body)
+      submission_data = JSONParser().parse(request)
       submission = Submission(submission_data, 'cpl_submission')
       print(submission)
       return JsonResponse(submission, safe=False)
