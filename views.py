@@ -12,6 +12,7 @@ from .models import ContractorClass, RevenueBand, MoldHazardGroup, Limit, Deduct
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator
+from django.contrib.auth import logout
 
 # Create your views here.
 class ContractorBaseRate:
