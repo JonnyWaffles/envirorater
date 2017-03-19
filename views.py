@@ -9,7 +9,7 @@ from django.core import serializers
 from decimal import Decimal
 from .forms import ContractorClassForm
 from .models import ContractorClass, RevenueBand, MoldHazardGroup, Limit, Deductible, Aggregate, Nose
-#from .serializers import ContractorClassSerializer
+from .serializers import SubmissionDataSerializer, ContractorClassSerializer, SubmissionResponseSerializer
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator
@@ -20,8 +20,8 @@ from rest_framework.parsers import JSONParser
 # Create your views here.
 class ContractorBaseRate:
   def __init__(self, iso_code, revenue, mold_hazard_group):
-    iso_code = int(iso_code)
-    revenue = int(revenue)
+    iso_code = iso_code
+    revenue = revenue
     contractor_class = ContractorClass.objects.get(iso_code__iexact = iso_code)
     self.iso_code = contractor_class.iso_code
     self.premium_ex_mold = contractor_class.get_premium_ex_mold(revenue)
@@ -32,14 +32,14 @@ class ContractorBaseRate:
     return "ISO Code: %s Premium: %s" % (self.iso_code, self.premium)
 
 class Submission:  
-  def __init__(self, submission_data, sub_type):     
+  def __init__(self, submission_data, sub_type):
     self.sub_type = sub_type
     self.contractor_classes = []
-    contractor_array = submission_data[sub_type]['contractor_classes']
+    contractor_array = submission_data['contractor_classes']
     for contractor_data in contractor_array:
       c = ContractorBaseRate(**contractor_data)
       self.contractor_classes.append(c)
-    self.manual_rate = submission_data[type]['manual_rate'] 
+    self.manual_rate = submission_data['manual_rate'] 
   
 class Index(View):    
   def get(self, request, *args, **kwargs):
@@ -55,15 +55,16 @@ class ContractorBaseRateAPI(View):
     
     def get(self, request, *args, **kwargs):
       contractor_classes = ContractorClass.objects.all()
-      #serializer = ContractorClassSerializer(contractor_classes, many=True)
+      serializer = ContractorClassSerializer(contractor_classes, many=True)
       return JsonResponse(serializer.data, safe=False)
     
     def post(self, request, *args, **kwargs):
       submission_data = JSONParser().parse(request)
-      submission = Submission(submission_data, 'cpl_submission')
-      print(submission)
-      return JsonResponse(submission, safe=False)
-        
-      
-      
- 
+      serializer = SubmissionDataSerializer(data = submission_data['cpl_submission'])
+      if serializer.is_valid():
+        #Note later need to come back here and do for each key() in submission_data so we can do more than 1 sub type per request.
+        submission = Submission(serializer.validated_data, 'cpl_submission')
+        print(submission)
+        return JsonResponse(SubmissionResponseSerializer(submission).data, safe=False)
+      else:
+        return JsonResponse(serializer.errors, status=400)
