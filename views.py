@@ -16,6 +16,10 @@ from django.utils.decorators import method_decorator
 from django.contrib.auth import logout
 from rest_framework.renderers import JSONRenderer
 from rest_framework.parsers import JSONParser
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework import authentication, permissions
+from rest_framework import status
 
 # Create your views here.
 class ContractorBaseRate:
@@ -47,24 +51,25 @@ class Index(View):
     context = {"contractor_classes" : contractor_classes}    
     return render(request, 'envirorater/home.html', context)
 
-@method_decorator(csrf_exempt, name='dispatch')  
-class ContractorBaseRateAPI(View):    
+#@method_decorator(csrf_exempt, name='dispatch')  
+class ContractorBaseRateAPI(APIView):    
 #   Provide a GET request with iso_code, revenue, and mold_hazard_group
 #   Returns JsonResponse with contractor class key values
 #   Note need to use REST Framework to surprass the Cross Origin Problem
+  permission_classes = (permissions.AllowAny, )
     
-    def get(self, request, *args, **kwargs):
-      contractor_classes = ContractorClass.objects.all()
-      serializer = ContractorClassSerializer(contractor_classes, many=True)
-      return JsonResponse(serializer.data, safe=False)
-    
-    def post(self, request, *args, **kwargs):
-      submission_data = JSONParser().parse(request)
-      serializer = SubmissionDataSerializer(data = submission_data['cpl_submission'])
-      if serializer.is_valid():
-        #Note later need to come back here and do for each key() in submission_data so we can do more than 1 sub type per request.
-        submission = Submission(serializer.validated_data, 'cpl_submission')
-        print(submission)
-        return JsonResponse(SubmissionResponseSerializer(submission).data, safe=False)
-      else:
-        return JsonResponse(serializer.errors, status=400)
+  def get(self, request, *args, **kwargs):
+    contractor_classes = ContractorClass.objects.all()
+    serializer = ContractorClassSerializer(contractor_classes, many=True)
+    return Response(serializer.data)
+
+  def post(self, request, *args, **kwargs):
+    submission_data = request.data
+    serializer = SubmissionDataSerializer(data = submission_data.get('cpl_submission'))
+    if serializer.is_valid():
+      #Note later need to come back here and do for each key() in submission_data so we can do more than 1 sub type per request.
+      submission = Submission(serializer.validated_data, 'cpl_submission')
+      print(submission)
+      return Response(SubmissionResponseSerializer(submission).data)
+    else:
+      return Response(serializer.errors)
