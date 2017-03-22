@@ -27,13 +27,14 @@ class ContractorBaseRateSerializer(serializers.Serializer):
   mold_premium = serializers.IntegerField(min_value = 0)
   premium = serializers.IntegerField(min_value = 0)
   
-class SubmissionResponseSerializer(SubmissionDataSerializer):
-  sub_type = serializers.CharField()
-  
 class ManualRateResponseSerializer(ManualRateDataSerializer):
   total_ex_mold_premium = serializers.IntegerField(min_value = 0)
-  total_mold_premium = serializers.IntegerField(min_value = 0)
-
+  total_mold_premium = serializers.IntegerField(min_value = 0)  
+  
+class SubmissionResponseSerializer(SubmissionDataSerializer):
+  contractor_classes = ContractorBaseRateSerializer(many = True)
+  sub_type = serializers.CharField()
+  manual_rate = ManualRateResponseSerializer()
   
 class ContractorClassSerializer(serializers.HyperlinkedModelSerializer):
   class Meta:

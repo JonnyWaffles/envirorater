@@ -23,25 +23,37 @@ from rest_framework import status
 
 #Here we define classes for internal use within the views
 class ManualRate:
+  #Each of these methods need to return the ManualRate object so they can be chained.
   def get_limit_premium(self, premium_type):
+    attr = self.__getattribute__(premium_type)
     limit = Limit.objects.get(limit1__iexact = self.limit1, limit2__iexact = self.limit2)
-    ##Need to change self[premium_type] to get_attribute or set attribute. Research this tomorrow.
-    self[premium_type] = self[premium_type] * limit.factor
+    value = attr * limit.factor
+    print("Start Value: %s Factor: %s End Value: %s" % (attr, limit.factor, value))
+    self.__setattr__(premium_type, value)
     return self
   
   def get_deductible_premium(self, premium_type):
+    attr = self.__getattribute__(premium_type)
     deductible = Deductible.objects.get(deductible__iexact = self.deductible)    
-    self[premium_type] = self[premium_type] * deductible.factor   
+    value = attr * deductible.factor
+    print("Start Value: %s Factor: %s End Value: %s" % (attr, deductible.factor, value))
+    self.__setattr__(premium_type, value)
     return self
   
   def get_primary_nose_coverage_premium(self, premium_type):
+    attr = self.__getattribute__(premium_type)
     primary_nose_coverage = Nose.objects.get(years__iexact = self.primary_nose_coverage)
-    self[premium_type] = self[premium_type] * primary_nose_coverage.factor 
+    value = attr * primary_nose_coverage.factor 
+    print("Start Value: %s Factor: %s End Value: %s" % (attr, primary_nose_coverage.factor, value))
+    self.__setattr__(premium_type, value)
     return self
   
   def get_mold_nose_coverage_premium(self, premium_type):
+    attr = self.__getattribute__(premium_type)
     nose = Nose.objects.get(years__iexact = self.mold_nose_coverage)
-    self[premium_type] = self[premium_type] * nose.factor
+    value = attr * nose.factor
+    print("Start Value: %s Factor: %s End Value: %s" % (attr, nose.factor, value))
+    self.__setattr__(premium_type, value)
     return self
   
   def __init__(self, base_rate_premium_totals, manual_rate_data):
@@ -51,8 +63,9 @@ class ManualRate:
       #These are the keys we are looking for, ignore excess data or deal with it later
       if k in ('limit1', 'limit2', 'deductible', 'primary_nose_coverage', 'mold_nose_coverage'): 
         setattr(self, k, manual_rate_data[k])
-    self.total_ex_mold_premium = ManualRate.get_limit_premium(self, 'total_ex_mold_premium').get_deductible_premium(self, 'total_ex_mold_premium').get_primary_nose_coverage_premium(self, 'total_ex_mold_premium') 
-    self.total_mold_premium = ManualRate.get_limit_premium(self, 'total_mold_premium').get_deductible_premium(self, 'total_mold_premium').get_mold_nose_coverage_premium(self, 'total_mold_premium')
+        #This is gross and can probably be refactored, but you kick off the chain by passing the object to the class to perform the calculations. The return value of each is the object.
+    self.total_ex_mold_premium = ManualRate.get_limit_premium(self, 'total_ex_mold_premium').get_deductible_premium('total_ex_mold_premium').get_primary_nose_coverage_premium('total_ex_mold_premium').total_ex_mold_premium 
+    self.total_mold_premium = ManualRate.get_limit_premium(self, 'total_mold_premium').get_deductible_premium('total_mold_premium').get_mold_nose_coverage_premium('total_mold_premium').total_mold_premium
 
 class ContractorBaseRate:
   def __init__(self, iso_code, revenue, mold_hazard_group):
