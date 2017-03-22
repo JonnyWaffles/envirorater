@@ -21,11 +21,41 @@ from rest_framework.views import APIView
 from rest_framework import authentication, permissions
 from rest_framework import status
 
-# Create your views here.
+#Here we define classes for internal use within the views
+class ManualRate:
+  def get_limit_premium(self, premium_type):
+    limit = Limit.objects.get(limit1__iexact = self.limit1, limit2__iexact = self.limit2)
+    ##Need to change self[premium_type] to get_attribute or set attribute. Research this tomorrow.
+    self[premium_type] = self[premium_type] * limit.factor
+    return self
+  
+  def get_deductible_premium(self, premium_type):
+    deductible = Deductible.objects.get(deductible__iexact = self.deductible)    
+    self[premium_type] = self[premium_type] * deductible.factor   
+    return self
+  
+  def get_primary_nose_coverage_premium(self, premium_type):
+    primary_nose_coverage = Nose.objects.get(years__iexact = self.primary_nose_coverage)
+    self[premium_type] = self[premium_type] * primary_nose_coverage.factor 
+    return self
+  
+  def get_mold_nose_coverage_premium(self, premium_type):
+    nose = Nose.objects.get(years__iexact = self.mold_nose_coverage)
+    self[premium_type] = self[premium_type] * nose.factor
+    return self
+  
+  def __init__(self, base_rate_premium_totals, manual_rate_data):
+    self.total_ex_mold_premium = base_rate_premium_totals.total_premium_ex_mold
+    self.total_mold_premium = base_rate_premium_totals.total_mold_premium
+    for k in manual_rate_data:
+      #These are the keys we are looking for, ignore excess data or deal with it later
+      if k in ('limit1', 'limit2', 'deductible', 'primary_nose_coverage', 'mold_nose_coverage'): 
+        setattr(self, k, manual_rate_data[k])
+    self.total_ex_mold_premium = ManualRate.get_limit_premium(self, 'total_ex_mold_premium').get_deductible_premium(self, 'total_ex_mold_premium').get_primary_nose_coverage_premium(self, 'total_ex_mold_premium') 
+    self.total_mold_premium = ManualRate.get_limit_premium(self, 'total_mold_premium').get_deductible_premium(self, 'total_mold_premium').get_mold_nose_coverage_premium(self, 'total_mold_premium')
+
 class ContractorBaseRate:
   def __init__(self, iso_code, revenue, mold_hazard_group):
-    iso_code = iso_code
-    revenue = revenue
     contractor_class = ContractorClass.objects.get(iso_code__iexact = iso_code)
     self.iso_code = contractor_class.iso_code
     self.premium_ex_mold = contractor_class.get_premium_ex_mold(revenue)
@@ -35,18 +65,29 @@ class ContractorBaseRate:
   def __str__(self):
     return "ISO Code: %s Premium: %s" % (self.iso_code, self.premium)
 
+class BaseRatePremiumTotals:
+  def __init__(self, submission):
+    self.total_premium_ex_mold = 0
+    self.total_mold_premium = 0
+    for contractor in submission.contractor_classes:
+      self.total_premium_ex_mold += contractor.premium_ex_mold
+      self.total_mold_premium += contractor.mold_premium
+      self.total_premium = self.total_premium_ex_mold + self.total_mold_premium  
+      
 class Submission:  
   def __init__(self, submission_data, sub_type):
     self.sub_type = sub_type
     self.contractor_classes = []
     contractor_array = submission_data['contractor_classes']
     for contractor_data in contractor_array:
-      c = ContractorBaseRate(**contractor_data)
+      c = ContractorBaseRate(**contractor_data) #Unpack data to instantiate the objects
       self.contractor_classes.append(c)
-    self.manual_rate = submission_data['manual_rate'] 
-  
+    base_rate_premium_totals = BaseRatePremiumTotals(self)  
+    self.manual_rate = ManualRate(base_rate_premium_totals, submission_data['manual_rate']) 
+    
+#Views go here.
 class Index(View):    
-  def get(self, request, *args, **kwargs):
+  def get(self, request, *args, **manual_rate_data):
     contractor_classes = ContractorClass.objects.all()    
     context = {"contractor_classes" : contractor_classes}    
     return render(request, 'envirorater/home.html', context)
@@ -58,18 +99,17 @@ class ContractorBaseRateAPI(APIView):
 #   Note need to use REST Framework to surprass the Cross Origin Problem
   permission_classes = (permissions.AllowAny, )
     
-  def get(self, request, *args, **kwargs):
+  def get(self, request, *args, **manual_rate_data):
     contractor_classes = ContractorClass.objects.all()
     serializer = ContractorClassSerializer(contractor_classes, many=True)
     return Response(serializer.data)
 
-  def post(self, request, *args, **kwargs):
+  def post(self, request, *args, **manual_rate_data):
     submission_data = request.data
     serializer = SubmissionDataSerializer(data = submission_data.get('cpl_submission'))
     if serializer.is_valid():
       #Note later need to come back here and do for each key() in submission_data so we can do more than 1 sub type per request.
       submission = Submission(serializer.validated_data, 'cpl_submission')
-      print(submission)
       return Response(SubmissionResponseSerializer(submission).data)
     else:
-      return Response(serializer.errors)
+      return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

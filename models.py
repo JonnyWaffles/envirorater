@@ -42,7 +42,8 @@ class MoldHazardGroup(models.Model):
   factor = models.DecimalField(max_digits = 4, decimal_places = 3)
   
 class Limit(models.Model):
-  limit = models.PositiveIntegerField() 
+  limit1 = models.PositiveIntegerField(default = 1000000)
+  limit2 = models.PositiveIntegerField(default = 1000000) 
   factor = models.DecimalField(max_digits = 4, decimal_places = 3)
   
 class Deductible(models.Model):
