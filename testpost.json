@@ -17,7 +17,6 @@
 		"manual_rate": {
 			"limit1": 1000000,
 			"limit2" : 1000000,
-			"deductible": 10000,
 			"primary_nose_coverage": 1,
 			"mold_nose_coverage": 1
 		}

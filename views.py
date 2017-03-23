@@ -20,6 +20,26 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import authentication, permissions
 from rest_framework import status
+import importlib
+
+#Here we define classes for internal use within the views
+class PremiumModifiers: #Or, Manual rate cleaner try number 2?
+  def get_rating_factors(self, **factor_dict):
+    models_module = importlib.import_module("envirorater.models")
+    #Check for various types, we can add more later as needed. Excess k:v pairs will be ignored
+    factor_types = {'deductible' : 'Deductible', 'primary_nose_coverage' : 'Nose', 'mold_nose_coverage' : 'Nose' }
+    factor_value_dict = {}
+    for k in factor_dict:
+      if k in factor_types.keys():
+        query = {'{0}__iexact'.format(k) : factor_dict[k]}
+        factor = getattr(models_module, factor_types[k]).objects.get(**query).factor
+        factor_value_dict.update( {k : factor})
+    #Limit factor is a special case that needs two values from the dictionary, so we get it outside of the if statements since we need both  
+    limit_factor = Limit.objects.get(limit1__iexact = factor_dict['limit1'], limit2__iexact = factor_dict['limit2']).factor
+    factor_value_dict.update({'limit' : limit_factor})
+    return factor_value_dict #For testing.
+    
+
 
 #Here we define classes for internal use within the views
 class ManualRate:
@@ -28,7 +48,6 @@ class ManualRate:
     attr = self.__getattribute__(premium_type)
     limit = Limit.objects.get(limit1__iexact = self.limit1, limit2__iexact = self.limit2)
     value = attr * limit.factor
-    print("Start Value: %s Factor: %s End Value: %s" % (attr, limit.factor, value))
     self.__setattr__(premium_type, value)
     return self
   
@@ -36,7 +55,6 @@ class ManualRate:
     attr = self.__getattribute__(premium_type)
     deductible = Deductible.objects.get(deductible__iexact = self.deductible)    
     value = attr * deductible.factor
-    print("Start Value: %s Factor: %s End Value: %s" % (attr, deductible.factor, value))
     self.__setattr__(premium_type, value)
     return self
   
@@ -44,7 +62,6 @@ class ManualRate:
     attr = self.__getattribute__(premium_type)
     primary_nose_coverage = Nose.objects.get(years__iexact = self.primary_nose_coverage)
     value = attr * primary_nose_coverage.factor 
-    print("Start Value: %s Factor: %s End Value: %s" % (attr, primary_nose_coverage.factor, value))
     self.__setattr__(premium_type, value)
     return self
   
@@ -52,7 +69,6 @@ class ManualRate:
     attr = self.__getattribute__(premium_type)
     nose = Nose.objects.get(years__iexact = self.mold_nose_coverage)
     value = attr * nose.factor
-    print("Start Value: %s Factor: %s End Value: %s" % (attr, nose.factor, value))
     self.__setattr__(premium_type, value)
     return self
   
