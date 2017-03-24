@@ -55,6 +55,8 @@ class Aggregate(models.Model):
   factor = models.DecimalField(max_digits = 4, decimal_places = 3)
 
 class Nose(models.Model):
+  primary_nose_coverage = models.PositiveIntegerField()
+  mold_nose_coverage = models.PositiveIntegerField()
   years = models.PositiveIntegerField()
   factor = models.DecimalField(max_digits = 4, decimal_places = 3)
   

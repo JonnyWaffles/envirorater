@@ -18,7 +18,13 @@ class ManualRateDataSerializer(serializers.Serializer):
 
 class SubmissionDataSerializer(serializers.Serializer):
   contractor_classes = ContractorSubmissionDataSerializer(many = True)
-  manual_rate = ManualRateDataSerializer()   
+  manual_rate = ManualRateDataSerializer()
+  
+class PremiumModifierAPISerializer(serializers.Serializer):
+  choices = ['limit1', 'limit2', 'deductible', 'primary_nose_coverage', 'mold_nose_coverage']
+  premium = serializers.IntegerField(min_value = 0)
+  modifier = serializers.ChoiceField(choices)
+  mod_value = serializers.IntegerField(min_value = 0)
   
 #Response Serializers  
 class ContractorBaseRateSerializer(serializers.Serializer):
@@ -28,7 +34,7 @@ class ContractorBaseRateSerializer(serializers.Serializer):
   premium = serializers.IntegerField(min_value = 0)
   
 class ManualRateResponseSerializer(ManualRateDataSerializer):
-  total_ex_mold_premium = serializers.IntegerField(min_value = 0)
+  total_premium_ex_mold = serializers.IntegerField(min_value = 0)
   total_mold_premium = serializers.IntegerField(min_value = 0)  
   
 class SubmissionResponseSerializer(SubmissionDataSerializer):
