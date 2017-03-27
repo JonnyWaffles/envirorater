@@ -6,6 +6,7 @@ from django.views.generic import View
 from django.forms import inlineformset_factory, formset_factory
 from django.http import HttpResponseRedirect, JsonResponse
 from django.core import serializers
+from django.core.exceptions import ObjectDoesNotExist
 from decimal import Decimal
 from .forms import ContractorClassForm
 from .models import ContractorClass, RevenueBand, MoldHazardGroup, Limit, Deductible, Aggregate, Nose
@@ -41,11 +42,14 @@ class PremiumModifiers: #Or, Manual rate cleaner try number 2?
         factor_value_dict.update( {k : factor} )
     #Limit factor is a special case that needs two values from the dictionary, so we get it outside of the prior statements since we need both
     if 'limit1' in factor_dict.keys() and 'limit2' in factor_dict.keys():
-      limit_factor = Limit.objects.get(limit1__iexact = factor_dict['limit1'], limit2__iexact = factor_dict['limit2']).factor
-      factor_value_dict.update({'limit' : limit_factor})
+        limit_factor = Limit.objects.get(limit1__iexact = factor_dict['limit1'], limit2__iexact = factor_dict['limit2']).factor
+        factor_value_dict.update({'limit' : limit_factor})
     return factor_value_dict
   
   def mod_premium(self, premium, **factor_dict):
+    #debug
+    print("Premium: %s" % (premium))
+    print("Factor_Dict: %s" % (factor_dict))
     factor_value_dict = PremiumModifiers.get_rating_factors(self, **factor_dict)
     for factor in factor_value_dict.values():
       premium = premium * factor
@@ -141,21 +145,21 @@ class PremiumModifierAPIGet(APIView):
     premium = query.data['premium']
     print('Premium In: %s' % (premium))
     factor_dict = {}
-    #Once again limits are a special case. We need the user to input them 'limit1/limit2'
+    #Once again limits are a special case. We need the user to input them 'limit1/limit2';
     if query.data['modifier'] == 'limit':
       try:
         data_string = query.data['mod_value']
         limit1 = data_string.split('/')[0]
         limit2 = data_string.split('/')[1]
-        #for debug
-        print("Limit1: %s" % (limit1) )
-        print("Limit2: %s" % (limit2) )
-        factor_dict = {'limi1t' : limit2, 'limit2' : limit2}
       except:
         raise rest_framework.serializers.ValidationError('Limits must be separated by a slash. Ex. 10000/5000')
-    factor_dict = {query.data['modifier'] : query.data['mod_value']}
+      try:
+        limit_factor = Limit.objects.get(limit1__iexact = limit1, limit2__iexact = limit2).factor
+      except ObjectDoesNotExist:
+        raise rest_framework.serializers.ValidationError('That limit object could not be found')
+      factor_dict = {'limit1' : limit2, 'limit2' : limit2}      
+    else:
+      factor_dict = {query.data['modifier'] : query.data['mod_value']}
     premium = PremiumModifiers().mod_premium(premium, **factor_dict)
-    print('New Premium: %s' % (premium))
     query._data['premium'] = premium
-    print(query)
     return Response(query.data)

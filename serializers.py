@@ -24,7 +24,7 @@ class PremiumModifierAPISerializer(serializers.Serializer):
   choices = ['limit1', 'limit2', 'deductible', 'primary_nose_coverage', 'mold_nose_coverage']
   premium = serializers.IntegerField(min_value = 0)
   modifier = serializers.ChoiceField(choices)
-  mod_value = serializers.IntegerField(min_value = 0)
+  mod_value = serializers.CharField()
   
 #Response Serializers  
 class ContractorBaseRateSerializer(serializers.Serializer):
