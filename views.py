@@ -9,8 +9,8 @@ from django.core import serializers
 from django.core.exceptions import ObjectDoesNotExist
 from decimal import Decimal
 from .forms import ContractorClassForm
-from .models import ContractorClass, RevenueBand, MoldHazardGroup, Limit, Deductible, Aggregate, Nose
-from .serializers import SubmissionDataSerializer, ContractorClassSerializer, SubmissionResponseSerializer, PremiumModifierAPISerializer
+from .models import ContractorClass, ProfessionalClass, RevenueBand, MoldHazardGroup, Limit, Deductible, Aggregate, Nose, PriorActs, State
+from .serializers import CPLSubmissionDataSerializer, ContractorClassSerializer, SubmissionResponseSerializer, PremiumModifierAPISerializer, ProfessionalClassSerializer
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator
@@ -22,6 +22,7 @@ from rest_framework.views import APIView
 from rest_framework.exceptions import APIException
 from rest_framework import authentication, permissions
 from rest_framework import status
+from abc import 
 import rest_framework.serializers
 import importlib
 
@@ -33,7 +34,8 @@ class PremiumModifiers: #Or, Manual rate cleaner try number 2?
   def get_rating_factors(self, **factor_dict):
     #Check for various types, we can add more later as needed. Excess k:v pairs will be ignored
     #Also map the types to their respective models
-    factor_types = {'deductible' : 'Deductible', 'primary_nose_coverage' : 'Nose', 'mold_nose_coverage' : 'Nose' }
+    factor_types = {'deductible' : 'Deductible', 'primary_nose_coverage' : 'Nose', 'mold_nose_coverage' : 'Nose', 
+                    'aggregate_deductible_multiplier' : 'Aggregate', 'state' : 'State', 'prior_acts_years' : 'PriorActs' }
     factor_value_dict = {}
     for k in factor_dict:
       if k in factor_types.keys():
@@ -69,7 +71,17 @@ class ManualRate:
     self.total_premium_ex_mold = PremiumModifiers().mod_premium(ex_mold_premium, **ex_mold_dict)
     mold_premium = base_rate_premium_totals.total_mold_premium
     mold_dict = {k : manual_rate_data[k] for k in manual_rate_data.keys() & {'limit1', 'limit2', 'deductible', 'mold_nose_coverage'} }
-    self.total_mold_premium = PremiumModifiers().mod_premium(mold_premium, **mold_dict)    
+    self.total_mold_premium = PremiumModifiers().mod_premium(mold_premium, **mold_dict)
+    
+class ProfessionalManualRate:
+  def __init__(self, base_rate_premium_totals, manual_rate_data):
+    total_premium = base_rate_premium_totals.total_premium
+    key_list = ('limit1', 'limit2', 'deductible', 'aggregate_deductible_multiplier', 'state', 'prior_acts_years')
+    for k in manual_rate_data:
+      if k in key_list
+        setattr(self, k, manual_rate_data[k])
+    factor_dict = {k : manual_rate_data[k] for k in key_list}
+    self.total_premium = PremiumModifiers().mod_premium(total_premium, **factor_dict)
 
 class ContractorBaseRate:
   def __init__(self, iso_code, revenue, mold_hazard_group):
@@ -81,7 +93,33 @@ class ContractorBaseRate:
   
   def __str__(self):
     return "ISO Code: %s Premium: %s" % (self.iso_code, self.premium)
+  
+class ProfessionalBaseRate:
+  def __init__(self, iso_code, revenue):
+    professional_class = ProfessionalClass.objects.get(iso_code__iexact = iso_code)
+    self.iso_code = professional_class.iso_code
+    self.premium = professional_class.get_premium(revenue)
+    
+  def __str__(self):
+    return "ISO Code: %s Premium: %s" % (self.iso_code, self.premium)
 
+class ProfessionalBaseRatePremiumTotals:
+  def __init__(self, submission)
+  self.total_premium = 0
+  for contractor in submission.contractor_classes:
+    self.total_premium += contractor.premium
+
+class ProfessionalSubmission:
+  def __init__(self, submission_data, sub_type):
+    self.sub_type = sub_type
+    self.professional_classes = []
+    professional_array = submission_data['contractor_classes'] #we can just call it contractor classes for now 
+    for professional_data in professional_array:
+      p = ProfessionalBaseRate(**professional_data)
+      self.professional_classes.append(p)
+    self.base_rate_premium_totals = ProfessionalBaseRatePremiumTotals(self)
+    self.manual_rate = ProfessionalManualRate(base_rate_premium_totals, submission_data['manual_rate'])
+    
 class BaseRatePremiumTotals:
   def __init__(self, submission):
     self.total_premium_ex_mold = 0
@@ -94,13 +132,21 @@ class BaseRatePremiumTotals:
 class Submission:  
   def __init__(self, submission_data, sub_type):
     self.sub_type = sub_type
-    self.contractor_classes = []
-    contractor_array = submission_data['contractor_classes']
-    for contractor_data in contractor_array:
-      c = ContractorBaseRate(**contractor_data) #Unpack data to instantiate the objects
-      self.contractor_classes.append(c)
+    self.base_rating_classes = []
+    base_rating_array = submission_data['base_rating_classes']
+    for base_rating_unit in base_rating_array:
+      unit = ContractorBaseRate(**base_rating_unit) #Unpack data to instantiate the objects
+      self.base_rating_classes.append(c)
     base_rate_premium_totals = BaseRatePremiumTotals(self)  
     self.manual_rate = ManualRate(base_rate_premium_totals, submission_data['manual_rate']) 
+    
+class PLSubmission:
+  def __init__(self, submission_data, sub_type):
+    self.sub_type = sub_type
+    #Note the current spreadsheet doesn't have ISO codes, but otherwise treats the PL classes the same
+    #So we can use contractor classes, need to go back and refactor this DRY
+    self.professional_classes = []
+    
     
 #Views go here.
 class Index(View):    
@@ -115,51 +161,60 @@ class ContractorBaseRateAPI(APIView):
 #   Note need to use REST Framework to surprass the Cross Origin Problem
   permission_classes = (permissions.AllowAny, )
     
-  def get(self, request, *args, **manual_rate_data):
+  def get(self, request, *args, **manual_rate_data): #Need to check on manual_rate_data how did this get here?
     contractor_classes = ContractorClass.objects.all()
     serializer = ContractorClassSerializer(contractor_classes, many=True)
     return Response(serializer.data)
 
   def post(self, request, *args, **manual_rate_data):
     submission_data = request.data
-    serializer = SubmissionDataSerializer(data = submission_data.get('cpl_submission'))
-    if serializer.is_valid():
+    cpl_serializer = CPLSubmissionDataSerializer(data = submission_data.get('cpl_submission'))
+    if cpl_serializer.is_valid():
       #Note later need to come back here and do for each key() in submission_data so we can do more than 1 sub type per request.
-      submission = Submission(serializer.validated_data, 'cpl_submission')
-      return Response(SubmissionResponseSerializer(submission).data)
+      cpl_submission = Submission(cpl_serializer.validated_data, 'cpl_submission')
+      return Response(CPLSubmissionDataSerializer(submission).data)
     else:
-      return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-class PremiumModifierAPI(APIView):
-  permission_classes = (permissions.AllowAny, )
-  def get(self, request, *args, **kwargs):
-    #Need to come back here and figure out how to display an example
-    return Response(PremiumModifierAPISerializer().data)
+      return Response(cpl_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
-class PremiumModifierAPIGet(APIView):  
+class ProfessionalSubmissionAPI(APIView):
+  
+  permission_classes = (permissions.AllowAny, )
+  
+  def get(self, request, *args, **kwargs):
+    professional_classes = ProfessionalClass.objects.all()
+    serializer = ProfessionalClassSerializer(professional_classes, many=True)
+    return Response(serializer.data)
+
+class PremiumModifierAPI(APIView):  
+  #I want a GET request with no arguments to return an options request detailing how to use the API
+  #Not sure how to do that yet so need to come back to this.
   permission_classes = (permissions.AllowAny, )
   from rest_framework.exceptions import ValidationError
   
   def get(self, request, *args, **kwargs):
-    query = PremiumModifierAPISerializer(request.query_params)
-    premium = query.data['premium']
-    print('Premium In: %s' % (premium))
-    factor_dict = {}
-    #Once again limits are a special case. We need the user to input them 'limit1/limit2';
-    if query.data['modifier'] == 'limit':
-      try:
-        data_string = query.data['mod_value']
-        limit1 = data_string.split('/')[0]
-        limit2 = data_string.split('/')[1]
-      except:
-        raise rest_framework.serializers.ValidationError('Limits must be separated by a slash. Ex. 10000/5000')
-      try:
-        limit_factor = Limit.objects.get(limit1__iexact = limit1, limit2__iexact = limit2).factor
-      except ObjectDoesNotExist:
-        raise rest_framework.serializers.ValidationError('That limit object could not be found')
-      factor_dict = {'limit1' : limit2, 'limit2' : limit2}      
+    if request.query_params:
+      query = PremiumModifierAPISerializer(request.query_params)
+      premium = query.data['premium']
+      print('Premium In: %s' % (premium))
+      factor_dict = {}
+      #Once again limits are a special case. We need the user to input them 'limit1/limit2';
+      if query.data['modifier'] == 'limit':
+        try:
+          data_string = query.data['mod_value']
+          limit1 = data_string.split('/')[0]
+          limit2 = data_string.split('/')[1]
+        except:
+          raise rest_framework.serializers.ValidationError('Limits must be separated by a slash. Ex. 10000/5000')
+        try:
+          limit_factor = Limit.objects.get(limit1__iexact = limit1, limit2__iexact = limit2).factor
+        except ObjectDoesNotExist:
+          raise rest_framework.serializers.ValidationError('That limit object could not be found')
+        factor_dict = {'limit1' : limit2, 'limit2' : limit2}      
+      else:
+        factor_dict = {query.data['modifier'] : query.data['mod_value']}
+      premium = PremiumModifiers().mod_premium(premium, **factor_dict)
+      query._data['premium'] = premium
+      return Response(query.data)
     else:
-      factor_dict = {query.data['modifier'] : query.data['mod_value']}
-    premium = PremiumModifiers().mod_premium(premium, **factor_dict)
-    query._data['premium'] = premium
-    return Response(query.data)
+      #Note there has to be a better way to show an example
+      raise rest_framework.serializers.ValidationError('Please make factor GET requests with premium, modifier, and mod_value arguments.')

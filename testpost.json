@@ -1,6 +1,6 @@
 {
 	"cpl_submission": {
-		"contractor_classes": [{
+		"base_rating_classes": [{
 				"iso_code": 94444,
 				"revenue": 800000,
 				"mold_hazard_group": "low"
