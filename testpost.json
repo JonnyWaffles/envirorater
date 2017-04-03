@@ -23,3 +23,27 @@
 		}
 	}
 }
+
+{
+	"professional_submission": {
+		"base_rating_classes": [{
+				"iso_code": 111111,
+				"revenue": 800000
+			}, {
+				"iso_code": 222222,
+				"revenue": 700000
+			}, {
+				"iso_code": 333333,
+				"revenue": 600000
+			}
+		],
+		"manual_rate": {
+			"limit1": 1000000,
+			"limit2" : 1000000,
+			"aggregate_deductible_multiplier": 1,
+			"state": "Virginia",
+			"deductible" : 10000,
+			"prior_acts_years" :1
+		}
+	}
+}

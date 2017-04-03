@@ -15,8 +15,8 @@ from .serializers import (CPLBaseRatingClassDataSerializer, CPLManualRateDataSer
                           CPLPremiumModifierAPISerializer, ProfessionalBaseRatingClassDataSerializer, 
                           ProfessionalManualRateDataSerializer, ProfessionalSubmissionDataSerializer, 
                           ProfessionalPremiumModifierAPISerializer, CPLManualRateResponseSerializer,
-                          ContractorBaseRateSerializer, CPLSubmissionResponseSerializer, ProfessionalBaseRateSerializer, 
-                          ContractorClassSerializer, ProfessionalClassSerializer)
+                          ContractorBaseRateSerializer, CPLSubmissionResponseSerializer, ProfessionalBaseRateResponseSerializer, 
+                          ContractorClassSerializer, ProfessionalClassSerializer, ProfessionalSubmissionResponseSerializer)
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator
@@ -56,7 +56,6 @@ class PremiumModifier: #Or, Manual rate cleaner try number 2?
                     limit_factor = Limit.objects.get(limit1__iexact = factor_dict['limit1'], limit2__iexact = factor_dict['limit2']).factor
                     factor_value_dict.update({'limit' : limit_factor})
             return factor_value_dict    
-            #debug
         factor_value_dict = get_rating_factors(**factor_dict)
         for factor in factor_value_dict.values():
             premium = premium * factor
@@ -73,15 +72,16 @@ class ManualRate:
         #Set the attributes for easy response serialization
             if k in self.__class__.key_list: 
                 setattr(self, k, manual_rate_data[k])
+                
 class ProfessionalManualRate(ManualRate):
     key_list = ManualRate.key_list + ('aggregate_deductible_multiplier', 'state', 'prior_acts_years')
 
     def __init__(self, manual_rate_data, **kwargs):
-        super().__init__(self, manual_rate_data, **kwargs)
+        super().__init__(manual_rate_data, **kwargs)
         if 'totals' in kwargs:
             try:
                 professional_base_rate_premium_totals_instance = kwargs['totals']
-                self.premium = PremiumModifier.mod_premium(professional_base_rate_premium_totals_instance.premium, self.__dict__)
+                self.total_premium = PremiumModifier.mod_premium(professional_base_rate_premium_totals_instance.total_premium, **self.__dict__)
             except AttributeError:
                 print("Object has no attribute Premium")
                 
@@ -109,15 +109,16 @@ class ContractorBaseRate:
   
     def __str__(self):
         return "ISO Code: %s Premium: %s" % (self.iso_code, self.premium)
-    
+	
 class ProfessionalBaseRate:
-    def __init__(self, iso_code, revenue):
-        professional_class = ProfessionalClass.objects.get(iso_code__iexact = iso_code)
-        self.iso_code = professional_class.iso_code
-        self.premium = professional_class.get_premium(revenue)
+	def __init__(self, iso_code, revenue):
+		professional_class = ProfessionalClass.objects.get(iso_code__iexact = iso_code)
+		self.revenue = revenue
+		self.iso_code = professional_class.iso_code
+		self.premium = professional_class.get_premium(revenue)
     
-    def __str__(self):
-        return "ISO Code: %s Premium: %s" % (self.iso_code, self.premium)
+	def __str__(self):
+		return "ISO Code: %s Premium: %s" % (self.iso_code, self.premium)
 
 class ContractorBaseRatePremiumTotals:
     def __init__(self, submission):
@@ -185,12 +186,12 @@ class ContractorBaseRateAPI(APIView):
 #   Note need to use REST Framework to surprass the Cross Origin Problem
     permission_classes = (permissions.AllowAny,)
     
-    def get(self, request, *args, **manual_rate_data): #Need to check on manual_rate_data how did this get here?
+    def get(self, request, *args, **kwargs): #Need to check on manual_rate_data how did this get here?
         contractor_classes = ContractorClass.objects.all()
         serializer = ContractorClassSerializer(contractor_classes, many=True)
         return Response(serializer.data)
 
-    def post(self, request, *args, **manual_rate_data):
+    def post(self, request, *args, **kwargs):
         submission_data = request.data
         cpl_serializer = CPLSubmissionDataSerializer(data = submission_data.get('cpl_submission'))
         if cpl_serializer.is_valid():
@@ -200,7 +201,23 @@ class ContractorBaseRateAPI(APIView):
             return Response(CPLSubmissionResponseSerializer(cpl_submission).data)
         else:
             return Response(cpl_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+		
+class ProfessionalBaseRateAPI(APIView):
+	
+	permission_classes = (permissions.AllowAny, )
+	
+	def get(self, request, *args, **kwargs):
+		contractor_classes = ProfessionalClass.objects.all()
+		serializer = ProfessionalClassSerializer(contractor_classes, many = True)
+		return Response(serializer.data)
+	
+	def post(self, request, *args, **kwargs):
+		submission_data = request.data
+		professional_serializer = ProfessionalSubmissionDataSerializer(data = submission_data.get('professional_submission'))
+		if professional_serializer.is_valid():
+			professional_submission = ProfessionalSubmission(professional_serializer.validated_data, 'professional_submission')
+			return Response(ProfessionalSubmissionResponseSerializer(professional_submission).data)
+	
 class ProfessionalSubmissionAPI(APIView):
   
   permission_classes = (permissions.AllowAny,)
