@@ -1,5 +1,5 @@
 from django import forms
-from .models import ContractorClass, RevenueBand, MoldHazardGroup, Limit, Deductible, Aggregate, Nose
+from .models import ContractorClass, ContractorsPollutionRevenueBand, ProfessionalRevenueBand, MoldHazardGroup, Limit, Deductible, Aggregate, Nose
 
 class ContractorClassForm(forms.Form):
   iso_code = forms.IntegerField(label = "ISO Code")

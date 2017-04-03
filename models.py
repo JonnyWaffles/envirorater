@@ -100,14 +100,14 @@ class Nose(models.Model):
     return "%s" % (self.years)
   
 class PriorActs(models.Model):
-  prior_acts_years = models.CharField()
+  prior_acts_years = models.CharField(max_length = 10)
   factor = models.DecimalField(max_digits = 4, decimal_places = 3)
   
   def __str__(self):
     return "Years: %s" % (self.years)
   
 class State(models.Model):
-  state = models.CharField()
+  state = models.CharField(max_length = 20)
   factor = models.DecimalField(max_digits = 4, decimal_places = 3)
   
   

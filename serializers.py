@@ -39,7 +39,7 @@ class CPLSubmissionDataSerializer(SubmissionSerializer):
   manual_rate = CPLManualRateDataSerializer()
   
 class CPLPremiumModifierAPISerializer(PremiumModifierAPISerializer):
-  choices = super().extend(['primary_nose_coverage', 'mold_nose_coverage'])
+  choices = PremiumModifierAPISerializer.choices.extend(['primary_nose_coverage', 'mold_nose_coverage'])
   
 #Professional Submission Serializers
 class ProfessionalBaseRatingClassDataSerializer(BaseRatingClassSerializer):
@@ -57,7 +57,7 @@ class ProfessionalSubmissionDataSerializer(SubmissionSerializer):
   manual_rate = ProfessionalManualRateDataSerializer()
 #Note we use the PremiumModSerializer for both requests and responses by changing the _premium field.
 class ProfessionalPremiumModifierAPISerializer(PremiumModifierAPISerializer):
-  choices = super().choices.extend(['aggregate_deductible_multiplier', 'prior_acts_years'])
+  choices = PremiumModifierAPISerializer.choices.extend(['aggregate_deductible_multiplier', 'prior_acts_years'])
 
 #CPL Response Serializers
 class CPLManualRateResponseSerializer(CPLManualRateDataSerializer):
