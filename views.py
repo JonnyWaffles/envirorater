@@ -16,7 +16,8 @@ from .serializers import (CPLBaseRatingClassDataSerializer, CPLManualRateDataSer
                           ProfessionalManualRateDataSerializer, ProfessionalSubmissionDataSerializer, 
                           ProfessionalPremiumModifierAPISerializer, CPLManualRateResponseSerializer,
                           ContractorBaseRateSerializer, CPLSubmissionResponseSerializer, ProfessionalBaseRateResponseSerializer, 
-                          ContractorClassSerializer, ProfessionalClassSerializer, ProfessionalSubmissionResponseSerializer)
+                          ContractorClassSerializer, ProfessionalClassSerializer, ProfessionalSubmissionResponseSerializer,
+						  SubmissionDataSetSerializer, SubmissionResponseSetSerializer)
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator
@@ -172,7 +173,15 @@ class ProfessionalSubmission(Submission):
     rating_class = ProfessionalBaseRate
     base_rating_total_class = ProfessionalBaseRatePremiumTotals
     manual_rate_class = ProfessionalManualRate
-      
+
+class SubmissionSet:
+	valid_submission_types = ('cpl_submission', 'professional_submission')
+	
+	def __init__(self, **kwargs):
+		for k in kwargs:
+			if k in self.valid_submission_types:
+				setattr(self, k, kwargs[k])
+		
 #Views go here.
 class Index(View):    
     def get(self, request, *args, **manual_rate_data):
@@ -227,6 +236,23 @@ class ProfessionalSubmissionAPI(APIView):
     serializer = ProfessionalClassSerializer(professional_classes, many=True)
     return Response(serializer.data)
 
+class SubmissionAPI(APIView):
+	
+	permission_classes = (permissions.AllowAny,)
+	
+	def get(self, request, *args, **kwargs):
+		return Response(SubmissionDataSetSerializer().data)
+	
+	def post(self, request, *args, **kwargs):
+		submission_set_data = request.data
+		submission_set_serializer = SubmissionDataSetSerializer(data = submission_set_data)
+		if submission_set_serializer.is_valid():
+			cpl_submission = CPLSubmission(submission_set_serializer.validated_data['cpl_submission'], 'cpl_submission')
+			professional_submission = ProfessionalSubmission(submission_set_serializer.validated_data['professional_submission'], 'professional_submission')
+			submission_set = SubmissionSet(cpl_submission = cpl_submission, professional_submission = professional_submission)
+			return Response(SubmissionResponseSetSerializer(submission_set).data)
+	
+	
 class PremiumModifierAPI(APIView):  
   #I want a GET request with no arguments to return an options request
   #detailing how to use the API

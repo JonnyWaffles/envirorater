@@ -94,3 +94,14 @@ class ProfessionalClassSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = ProfessionalClass
         fields = ( 'iso_code', 'iso_description')
+        
+#Test Serializers for new development
+
+class SubmissionDataSetSerializer(serializers.Serializer):
+    cpl_submission = CPLSubmissionDataSerializer(required = False)
+    professional_submission = ProfessionalSubmissionDataSerializer(required = False)
+    
+class SubmissionResponseSetSerializer(serializers.Serializer):
+    cpl_submission = CPLSubmissionResponseSerializer(required = False)
+    professional_submission = ProfessionalSubmissionResponseSerializer(required = False)
+    
