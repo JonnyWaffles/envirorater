@@ -21,10 +21,7 @@
 			"mold_nose_coverage": 1,
 			"deductible" : 10000
 		}
-	}
-}
-
-{
+	},
 	"professional_submission": {
 		"base_rating_classes": [{
 				"iso_code": 111111,

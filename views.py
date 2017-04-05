@@ -12,9 +12,8 @@ from .forms import ContractorClassForm
 from .models import (ContractorClass, ProfessionalClass, ContractorsPollutionRevenueBand, ProfessionalRevenueBand,
                      MoldHazardGroup, Limit, Deductible, Aggregate, Nose, PriorActs, State)
 from .serializers import (CPLBaseRatingClassDataSerializer, CPLManualRateDataSerializer, CPLSubmissionDataSerializer,
-                          CPLPremiumModifierAPISerializer, ProfessionalBaseRatingClassDataSerializer, 
-                          ProfessionalManualRateDataSerializer, ProfessionalSubmissionDataSerializer, 
-                          ProfessionalPremiumModifierAPISerializer, CPLManualRateResponseSerializer,
+                          PremiumModifierAPISerializer, ProfessionalBaseRatingClassDataSerializer, 
+                          ProfessionalManualRateDataSerializer, ProfessionalSubmissionDataSerializer, CPLManualRateResponseSerializer,
                           ContractorBaseRateSerializer, CPLSubmissionResponseSerializer, ProfessionalBaseRateResponseSerializer, 
                           ContractorClassSerializer, ProfessionalClassSerializer, ProfessionalSubmissionResponseSerializer,
 						  SubmissionDataSetSerializer, SubmissionResponseSetSerializer)
@@ -29,6 +28,7 @@ from rest_framework.views import APIView
 from rest_framework.exceptions import APIException
 from rest_framework import authentication, permissions
 from rest_framework import status
+from rest_framework.reverse import reverse
 import rest_framework.serializers
 import importlib
 
@@ -148,9 +148,8 @@ class Submission:
 #   rating_class = None
 #   base_rating_total_class = None
 #   manual_rate_class = None
-    def __init__(self, submission_data, sub_type):
+    def __init__(self, submission_data):
     #We need to set the sub_type for the response serializer
-        self.sub_type = sub_type
         self.base_rating_classes = []
         base_rating_array = submission_data['base_rating_classes']
         rating_class = self.rating_class   
@@ -189,52 +188,33 @@ class Index(View):
         context = {"contractor_classes" : contractor_classes}    
         return render(request, 'envirorater/home.html', context)
 
-class ContractorBaseRateAPI(APIView):    
+class ContractorBaseRateAPI(APIView):
 #   Provide a GET request with iso_code, revenue, and mold_hazard_group
 #   Returns JsonResponse with contractor class key values
 #   Note need to use REST Framework to surprass the Cross Origin Problem
-    permission_classes = (permissions.AllowAny,)
-    
-    def get(self, request, *args, **kwargs): #Need to check on manual_rate_data how did this get here?
-        contractor_classes = ContractorClass.objects.all()
-        serializer = ContractorClassSerializer(contractor_classes, many=True)
-        return Response(serializer.data)
-
-    def post(self, request, *args, **kwargs):
-        submission_data = request.data
-        cpl_serializer = CPLSubmissionDataSerializer(data = submission_data.get('cpl_submission'))
-        if cpl_serializer.is_valid():
-      #Note later need to come back here and do for each key() in
-      #submission_data so we can do more than 1 sub type per request.
-            cpl_submission = CPLSubmission(cpl_serializer.validated_data, 'cpl_submission')
-            return Response(CPLSubmissionResponseSerializer(cpl_submission).data)
-        else:
-            return Response(cpl_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-		
-class ProfessionalBaseRateAPI(APIView):
-	
-	permission_classes = (permissions.AllowAny, )
+	permission_classes = (permissions.AllowAny,)
 	
 	def get(self, request, *args, **kwargs):
-		contractor_classes = ProfessionalClass.objects.all()
-		serializer = ProfessionalClassSerializer(contractor_classes, many = True)
+		contractor_classes = ContractorClass.objects.all()
+		serializer = ContractorClassSerializer(contractor_classes, many=True)
 		return Response(serializer.data)
 	
 	def post(self, request, *args, **kwargs):
-		submission_data = request.data
-		professional_serializer = ProfessionalSubmissionDataSerializer(data = submission_data.get('professional_submission'))
-		if professional_serializer.is_valid():
-			professional_submission = ProfessionalSubmission(professional_serializer.validated_data, 'professional_submission')
-			return Response(ProfessionalSubmissionResponseSerializer(professional_submission).data)
+		view = SubmissionAPI
+		return view.post(self, request, *args, **kwargs)
 	
-class ProfessionalSubmissionAPI(APIView):
-  
-  permission_classes = (permissions.AllowAny,)
-  
-  def get(self, request, *args, **kwargs):
-    professional_classes = ProfessionalClass.objects.all()
-    serializer = ProfessionalClassSerializer(professional_classes, many=True)
-    return Response(serializer.data)
+class ProfessionalBaseRateAPI(APIView):
+	
+	permission_classes = (permissions.AllowAny,)
+	
+	def get(self, request, *args, **kwargs):
+		professional_classes = ProfessionalClass.objects.all()
+		serializer = ProfessionalClassSerializer(professional_classes, many=True)
+		return Response(serializer.data)
+
+	def post(self, request, *args, **kwargs):
+		view = SubmissionAPI
+		return view.post(self, request, *args, **kwargs)
 
 class SubmissionAPI(APIView):
 	
@@ -247,45 +227,50 @@ class SubmissionAPI(APIView):
 		submission_set_data = request.data
 		submission_set_serializer = SubmissionDataSetSerializer(data = submission_set_data)
 		if submission_set_serializer.is_valid():
-			cpl_submission = CPLSubmission(submission_set_serializer.validated_data['cpl_submission'], 'cpl_submission')
-			professional_submission = ProfessionalSubmission(submission_set_serializer.validated_data['professional_submission'], 'professional_submission')
-			submission_set = SubmissionSet(cpl_submission = cpl_submission, professional_submission = professional_submission)
+			submission_set_dict = {}
+			sub_data = submission_set_serializer.validated_data
+			if 'cpl_submission' in sub_data:
+				cpl_submission = CPLSubmission(sub_data['cpl_submission'])
+				sub_data.update({'cpl_submission' : cpl_submission})
+			if 'professional_submission' in sub_data:
+				professional_submission = ProfessionalSubmission(sub_data['professional_submission'])
+				sub_data.update({'professional_submission' : professional_submission})
+			submission_set = SubmissionSet(**sub_data)
 			return Response(SubmissionResponseSetSerializer(submission_set).data)
+
+class PremiumModifierAPI(APIView):
+	#I want a GET request with no arguments to return an options request
+  	#detailing how to use the API
+  	#Not sure how to do that yet so need to come back to this.
+	permission_classes = (permissions.AllowAny,)
 	
+	from rest_framework.exceptions import ValidationError
 	
-class PremiumModifierAPI(APIView):  
-  #I want a GET request with no arguments to return an options request
-  #detailing how to use the API
-  #Not sure how to do that yet so need to come back to this.
-    permission_classes = (permissions.AllowAny,)
-    from rest_framework.exceptions import ValidationError
-  
-    def get(self, request, *args, **kwargs):
-        if request.query_params:
-            query = PremiumModifierAPISerializer(request.query_params)
-            premium = query.data['premium']
-            print('Premium In: %s' % (premium))
-            factor_dict = {}
+	def get(self, request, *args, **kwargs):
+		if request.query_params:
+			query = PremiumModifierAPISerializer(request.query_params)
+			premium = query.data['premium']
+			print('Premium In: %s' % (premium))
+			factor_dict = {}
       #Once again limits are a special case.  We need the user to input them
       #'limit1/limit2';
-            if query.data['modifier'] == 'limit':
-                try:
-                    data_string = query.data['mod_value']
-                    limit1 = data_string.split('/')[0]
-                    limit2 = data_string.split('/')[1]
-                except:
-                    raise rest_framework.serializers.ValidationError('Limits must be separated by a slash. Ex. 10000/5000')
-                try:
-                    limit_factor = Limit.objects.get(limit1__iexact = limit1, limit2__iexact = limit2).factor
-                except ObjectDoesNotExist:
-                    raise rest_framework.serializers.ValidationError('That limit object could not be found')                
-                factor_dict = {'limit1' : limit2, 'limit2' : limit2}      
-            else:
-                factor_dict = {query.data['modifier'] : query.data['mod_value']}
-                premium = PremiumModifiers().mod_premium(premium, **factor_dict)
-                query._data['premium'] = premium
-                return Response(query.data)
-        else:
+			if query.data['modifier'] == 'limit':
+				try:
+					data_string = query.data['mod_value']
+					limit1 = data_string.split('/')[0]
+					limit2 = data_string.split('/')[1]
+				except:
+					raise rest_framework.serializers.ValidationError('Limits must be separated by a slash. Ex. 10000/5000')
+				try:
+					limit = Limit.objects.get(limit1__iexact = limit1, limit2__iexact = limit2)
+					factor_dict = {'limit1' : limit2, 'limit2' : limit2}
+				except ObjectDoesNotExist:
+					raise rest_framework.serializers.ValidationError('That limit object could not be found')					
+			else:
+				factor_dict = {query.data['modifier'] : query.data['mod_value']}
+			premium = PremiumModifier.mod_premium(premium, **factor_dict)
+			query._data['premium'] = premium
+			return Response(query.data)
+		else:
       #Note there has to be a better way to show an example
-            raise rest_framework.serializers.ValidationError('Please make factor GET requests with premium, modifier, and mod_value arguments.')
-			
+			raise rest_framework.serializers.ValidationError('Please make factor GET requests with premium, modifier, and mod_value arguments.')

@@ -20,7 +20,7 @@ class SubmissionSerializer(serializers.Serializer):
     manual_rate = ManualRateSerializer()
 
 class PremiumModifierAPISerializer(serializers.Serializer):
-    choices = ['limit1', 'limit2', 'deductible']
+    choices = ['limit1', 'limit2', 'deductible', 'primary_nose_coverage', 'mold_nose_coverage', 'aggregate_deductible_multiplier', 'prior_acts_years', 'state']
   
     premium = serializers.IntegerField(min_value = 0)
     modifier = serializers.ChoiceField(choices)
@@ -71,7 +71,6 @@ class ContractorBaseRateSerializer(CPLBaseRatingClassDataSerializer):
 class CPLSubmissionResponseSerializer(CPLSubmissionDataSerializer):
     base_rating_classes = ContractorBaseRateSerializer(many = True)
     manual_rate = CPLManualRateResponseSerializer()
-    sub_type = serializers.CharField() #May need to refactor this, how to handle sub types?
 
 #Professional Response Serializers  
 class ProfessionalManualRateResponseSerializer(ProfessionalManualRateDataSerializer):
@@ -83,7 +82,6 @@ class ProfessionalBaseRateResponseSerializer(ProfessionalBaseRatingClassDataSeri
 class ProfessionalSubmissionResponseSerializer(ProfessionalSubmissionDataSerializer):
     base_rating_classes = ProfessionalBaseRateResponseSerializer(many = True)
     manual_rate = ProfessionalManualRateResponseSerializer()
-    sub_type = serializers.CharField()
     
 class ContractorClassSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
