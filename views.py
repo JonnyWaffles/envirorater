@@ -11,10 +11,9 @@ from decimal import Decimal
 from .forms import ContractorClassForm
 from .models import (ContractorClass, ProfessionalClass, ContractorsPollutionRevenueBand, ProfessionalRevenueBand,
                      MoldHazardGroup, Limit, Deductible, Aggregate, Nose, PriorActs, State)
-from .serializers import (CPLSubmissionDataSerializer, PremiumModifierAPISerializer, ProfessionalBaseRatingClassDataSerializer, 
-                          ProfessionalSubmissionDataSerializer, ContractorBaseRateSerializer, CPLSubmissionResponseSerializer,
-						  ProfessionalBaseRateResponseSerializer, ContractorClassSerializer, ProfessionalClassSerializer, 
-						  ProfessionalSubmissionResponseSerializer, SubmissionDataSetSerializer, SubmissionResponseSetSerializer)
+from .serializers import (CPLBaseRatingClassSerializer, CPLManualRateSerializer, CPLSubmissionSerializer,
+						  ProfessionalBaseRatingClassSerializer, ProfessionalManualRateSerializer, ProfessionalSubmissionSerializer,
+						  ContractorClassSerializer, ProfessionalClassSerializer, SubmissionSetSerializer, PremiumModifierAPISerializer)
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator
@@ -85,19 +84,20 @@ class ProfessionalManualRate(ManualRate):
                 print("Object has no attribute Premium")
                 
 class CPLManualRate(ManualRate):
-    key_list = ManualRate.key_list + ('primary_nose_coverage', 'mold_nose_coverage')
-
-    def __init__(self, manual_rate_data, **kwargs):
-        super().__init__(manual_rate_data, **kwargs)
-        if 'totals' in kwargs:
-                contractor_base_rate_premium_totals_instance = kwargs['totals']
-                ex_mold_dict = {k : manual_rate_data[k] for k in manual_rate_data.keys() & {'limit1', 'limit2', 'deductible', 'primary_nose_coverage'} }
-                mold_dict = {k : manual_rate_data[k] for k in manual_rate_data.keys() & {'limit1', 'limit2', 'deductible', 'mold_nose_coverage'} }
-                self.total_premium_ex_mold = PremiumModifier.mod_premium(contractor_base_rate_premium_totals_instance.total_premium_ex_mold, **ex_mold_dict)
-                self.total_mold_premium = PremiumModifier.mod_premium(contractor_base_rate_premium_totals_instance.total_mold_premium, **mold_dict)
+	key_list = ManualRate.key_list + ('primary_nose_coverage', 'mold_nose_coverage')
+	
+	def __init__(self, manual_rate_data, **kwargs):
+		super().__init__(manual_rate_data, **kwargs)
+		if 'totals' in kwargs:
+			contractor_base_rate_premium_totals_instance = kwargs['totals']
+			ex_mold_dict = {k : manual_rate_data[k] for k in manual_rate_data.keys() & {'limit1', 'limit2', 'deductible', 'primary_nose_coverage'} }
+			mold_dict = {k : manual_rate_data[k] for k in manual_rate_data.keys() & {'limit1', 'limit2', 'deductible', 'mold_nose_coverage'} }
+			self.total_premium_ex_mold = PremiumModifier.mod_premium(contractor_base_rate_premium_totals_instance.total_premium_ex_mold, **ex_mold_dict)
+			self.total_mold_premium = PremiumModifier.mod_premium(contractor_base_rate_premium_totals_instance.total_mold_premium, **mold_dict)
+			self.total_premium = self.total_premium_ex_mold + self.total_mold_premium
             
 class ContractorBaseRate:
-    def __init__(self, iso_code, revenue, mold_hazard_group):
+    def __init__(self, iso_code, revenue, mold_hazard_group, premium = 0):
         contractor_class = ContractorClass.objects.get(iso_code__iexact = iso_code)
         self.revenue = revenue
         self.mold_hazard_group = mold_hazard_group
@@ -110,7 +110,7 @@ class ContractorBaseRate:
         return "ISO Code: %s Premium: %s" % (self.iso_code, self.premium)
 	
 class ProfessionalBaseRate:
-	def __init__(self, iso_code, revenue):
+	def __init__(self, iso_code, revenue, premium = 0):
 		professional_class = ProfessionalClass.objects.get(iso_code__iexact = iso_code)
 		self.revenue = revenue
 		self.iso_code = professional_class.iso_code
@@ -120,9 +120,9 @@ class ProfessionalBaseRate:
 		return "ISO Code: %s Premium: %s" % (self.iso_code, self.premium)
 
 class ContractorBaseRatePremiumTotals:
-    def __init__(self, submission):
-        self.total_premium_ex_mold = 0
-        self.total_mold_premium = 0
+    def __init__(self, submission, total_premium_ex_mold = 0, total_mold_premium = 0):
+        self.total_premium_ex_mold = total_premium_ex_mold
+        self.total_mold_premium = total_mold_premium
         for base_rating_unit in submission.base_rating_classes:
             self.total_premium_ex_mold += base_rating_unit.premium_ex_mold
             self.total_mold_premium += base_rating_unit.mold_premium
@@ -219,22 +219,22 @@ class SubmissionAPI(APIView):
 	permission_classes = (permissions.AllowAny,)
 	
 	def get(self, request, *args, **kwargs):
-		return Response(SubmissionDataSetSerializer().data)
+		return Response(SubmissionSetSerializer().data)
 	
 	def post(self, request, *args, **kwargs):
 		submission_set_data = request.data
-		submission_set_serializer = SubmissionDataSetSerializer(data = submission_set_data)
+		submission_set_serializer = SubmissionSetSerializer(data = submission_set_data)
 		if submission_set_serializer.is_valid():
 			submission_set_dict = {}
 			sub_data = submission_set_serializer.validated_data
 			if 'cpl_submission' in sub_data:
 				cpl_submission = CPLSubmission(sub_data['cpl_submission'])
-				sub_data.update({'cpl_submission' : cpl_submission})
+				submission_set_dict.update({'cpl_submission' : cpl_submission})
 			if 'professional_submission' in sub_data:
 				professional_submission = ProfessionalSubmission(sub_data['professional_submission'])
-				sub_data.update({'professional_submission' : professional_submission})
-			submission_set = SubmissionSet(**sub_data)
-			return Response(SubmissionResponseSetSerializer(submission_set).data)
+				submission_set_dict.update({'professional_submission' : professional_submission})
+			submission_set = SubmissionSet(**submission_set_dict)
+			return Response(SubmissionSetSerializer(submission_set).data)
 
 class PremiumModifierAPI(APIView):
 	#I want a GET request with no arguments to return an options request
@@ -248,7 +248,6 @@ class PremiumModifierAPI(APIView):
 		if request.query_params:
 			query = PremiumModifierAPISerializer(request.query_params)
 			premium = query.data['premium']
-			print('Premium In: %s' % (premium))
 			factor_dict = {}
       #Once again limits are a special case.  We need the user to input them
       #'limit1/limit2';

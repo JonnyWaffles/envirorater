@@ -1,88 +1,54 @@
 from rest_framework import serializers
 from .models import ContractorClass, ProfessionalClass
 
-#Parent Classes, don't instantiate
-class BaseRateSerializer(serializers.Serializer):
-    iso_code = serializers.IntegerField(min_value = 0)
-    premium = serializers.IntegerField(min_value = 0)
-
-class ManualRateSerializer(serializers.Serializer):
-    limit1 = serializers.IntegerField(min_value = 0)
-    limit2 = serializers.IntegerField(min_value = 0)
-    deductible = serializers.IntegerField(min_value = 0)
-
-class BaseRatingClassSerializer(serializers.Serializer):
-    iso_code = serializers.IntegerField(min_value = 0)
-    revenue = serializers.IntegerField(min_value = 0)
-
-class SubmissionSerializer(serializers.Serializer):
-    base_rating_classes = BaseRateSerializer(many = True)
-    manual_rate = ManualRateSerializer()
-
+#Note we use the PremiumModifierAPISerializer for both requests and responses by changing the _premium field.
 class PremiumModifierAPISerializer(serializers.Serializer):
-    choices = ['limit1', 'limit2', 'deductible']
+    choices = ['limit1', 'limit2', 'deductible', 'primary_nose_coverage', 'mold_nose_coverage','aggregate_deductible_multiplier', 'prior_acts_years']
   
     premium = serializers.IntegerField(min_value = 0)
     modifier = serializers.ChoiceField(choices)
     mod_value = serializers.CharField()
 
-#CPL Submission Serializers
-class CPLBaseRatingClassDataSerializer(BaseRatingClassSerializer):
+#CPL Serializers
+class CPLBaseRatingClassSerializer(serializers.Serializer):
+    iso_code = serializers.IntegerField(min_value = 0)
+    revenue = serializers.IntegerField(min_value = 0)
     mold_hazard_group = serializers.CharField()
+    premium = serializers.IntegerField(min_value = 0, default = 0, required = False, read_only = True)
     
-class CPLManualRateDataSerializer(ManualRateSerializer):  
-    primary_nose_coverage = serializers.IntegerField(min_value = 0)
-    mold_nose_coverage = serializers.IntegerField(min_value = 0)
+class CPLManualRateSerializer(serializers.Serializer):
+    limit1 = serializers.IntegerField(min_value = 0, default = 1000000)
+    limit2 = serializers.IntegerField(min_value = 0, default = 1000000)
+    deductible = serializers.IntegerField(min_value = 0, default = 10000)
+    primary_nose_coverage = serializers.IntegerField(min_value = 0, default = 0)
+    mold_nose_coverage = serializers.IntegerField(min_value = 0, default = 0, required = False)
+    total_premium_ex_mold = serializers.IntegerField(min_value = 0, required = False, read_only = True)
+    total_mold_premium = serializers.IntegerField(min_value = 0, required = False, read_only = True)  
+    total_premium = serializers.IntegerField(min_value = 0, default = 0, required = False, read_only = True)
 
-class CPLSubmissionDataSerializer(SubmissionSerializer):
-    base_rating_classes = CPLBaseRatingClassDataSerializer(many = True)
-    manual_rate = CPLManualRateDataSerializer()
+class CPLSubmissionSerializer(serializers.Serializer):
+    base_rating_classes = CPLBaseRatingClassSerializer(many = True)
+    manual_rate = CPLManualRateSerializer(required = False)
 
-class CPLPremiumModifierAPISerializer(PremiumModifierAPISerializer):
-    choices = PremiumModifierAPISerializer.choices.extend(['primary_nose_coverage', 'mold_nose_coverage'])
-  
+#Professional Serializers
+class ProfessionalBaseRatingClassSerializer(serializers.Serializer):
+    iso_code = serializers.IntegerField(min_value = 0, default = 222222)
+    revenue = serializers.IntegerField(min_value = 0, default = 1000000)
+    premium = serializers.IntegerField(min_value = 0, default = 0, required = False, read_only = True)
 
-    #Professional Submission Serializers
-class ProfessionalBaseRatingClassDataSerializer(BaseRatingClassSerializer):
-  #Professional can use the BaseRatingClassSerializer since it only has a code and a revenue
-  #but for consistency I want to instantiate one since the above are supposed to be abstract
-    pass
-
-class ProfessionalManualRateDataSerializer(ManualRateSerializer):
+class ProfessionalManualRateSerializer(serializers.Serializer):
+    limit1 = serializers.IntegerField(min_value = 0, default = 1000000)
+    limit2 = serializers.IntegerField(min_value = 0, default = 1000000)
+    deductible = serializers.IntegerField(min_value = 0, default = 10000)
     aggregate_deductible_multiplier = serializers.IntegerField(min_value = 1)
     state = serializers.CharField()
     prior_acts_years = serializers.CharField()
+    total_premium = serializers.IntegerField(min_value = 0, default = 0, required = False, read_only = True)
     
-class ProfessionalSubmissionDataSerializer(SubmissionSerializer):
-    base_rating_classes = ProfessionalBaseRatingClassDataSerializer(many = True)
-    manual_rate = ProfessionalManualRateDataSerializer()
-#Note we use the PremiumModSerializer for both requests and responses by changing the _premium field.
-class ProfessionalPremiumModifierAPISerializer(PremiumModifierAPISerializer):
-    choices = PremiumModifierAPISerializer.choices.extend(['aggregate_deductible_multiplier', 'prior_acts_years'])
+class ProfessionalSubmissionSerializer(serializers.Serializer):
+    base_rating_classes = ProfessionalBaseRatingClassSerializer(many = True)
+    manual_rate = ProfessionalManualRateSerializer()
 
-#CPL Response Serializers
-class CPLManualRateResponseSerializer(CPLManualRateDataSerializer):
-    total_premium_ex_mold = serializers.IntegerField(min_value = 0)
-    total_mold_premium = serializers.IntegerField(min_value = 0)  
-
-class ContractorBaseRateSerializer(CPLBaseRatingClassDataSerializer):
-    premium = serializers.IntegerField(min_value = 0)
-
-class CPLSubmissionResponseSerializer(CPLSubmissionDataSerializer):
-    base_rating_classes = ContractorBaseRateSerializer(many = True)
-    manual_rate = CPLManualRateResponseSerializer()
-
-#Professional Response Serializers  
-class ProfessionalManualRateResponseSerializer(ProfessionalManualRateDataSerializer):
-    total_premium = serializers.IntegerField(min_value = 0)
-
-class ProfessionalBaseRateResponseSerializer(ProfessionalBaseRatingClassDataSerializer):
-    premium = serializers.IntegerField(min_value = 0)
-
-class ProfessionalSubmissionResponseSerializer(ProfessionalSubmissionDataSerializer):
-    base_rating_classes = ProfessionalBaseRateResponseSerializer(many = True)
-    manual_rate = ProfessionalManualRateResponseSerializer()
-    
 class ContractorClassSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = ContractorClass
@@ -92,13 +58,7 @@ class ProfessionalClassSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = ProfessionalClass
         fields = ( 'iso_code', 'iso_description')
-        
-#Test Serializers for new development
 
-class SubmissionDataSetSerializer(serializers.Serializer):
-    cpl_submission = CPLSubmissionDataSerializer(required = False)
-    professional_submission = ProfessionalSubmissionDataSerializer(required = False)
-    
-class SubmissionResponseSetSerializer(serializers.Serializer):
-    cpl_submission = CPLSubmissionResponseSerializer(required = False)
-    professional_submission = ProfessionalSubmissionResponseSerializer(required = False)
+class SubmissionSetSerializer(serializers.Serializer):
+    cpl_submission = CPLSubmissionSerializer(required = False)
+    professional_submission = ProfessionalSubmissionSerializer(required = False)
