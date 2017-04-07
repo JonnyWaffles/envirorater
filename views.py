@@ -11,12 +11,10 @@ from decimal import Decimal
 from .forms import ContractorClassForm
 from .models import (ContractorClass, ProfessionalClass, ContractorsPollutionRevenueBand, ProfessionalRevenueBand,
                      MoldHazardGroup, Limit, Deductible, Aggregate, Nose, PriorActs, State)
-from .serializers import (CPLBaseRatingClassDataSerializer, CPLManualRateDataSerializer, CPLSubmissionDataSerializer,
-                          PremiumModifierAPISerializer, ProfessionalBaseRatingClassDataSerializer, 
-                          ProfessionalManualRateDataSerializer, ProfessionalSubmissionDataSerializer, CPLManualRateResponseSerializer,
-                          ContractorBaseRateSerializer, CPLSubmissionResponseSerializer, ProfessionalBaseRateResponseSerializer, 
-                          ContractorClassSerializer, ProfessionalClassSerializer, ProfessionalSubmissionResponseSerializer,
-						  SubmissionDataSetSerializer, SubmissionResponseSetSerializer)
+from .serializers import (CPLSubmissionDataSerializer, PremiumModifierAPISerializer, ProfessionalBaseRatingClassDataSerializer, 
+                          ProfessionalSubmissionDataSerializer, ContractorBaseRateSerializer, CPLSubmissionResponseSerializer,
+						  ProfessionalBaseRateResponseSerializer, ContractorClassSerializer, ProfessionalClassSerializer, 
+						  ProfessionalSubmissionResponseSerializer, SubmissionDataSetSerializer, SubmissionResponseSetSerializer)
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator

@@ -20,7 +20,7 @@ class SubmissionSerializer(serializers.Serializer):
     manual_rate = ManualRateSerializer()
 
 class PremiumModifierAPISerializer(serializers.Serializer):
-    choices = ['limit1', 'limit2', 'deductible', 'primary_nose_coverage', 'mold_nose_coverage', 'aggregate_deductible_multiplier', 'prior_acts_years', 'state']
+    choices = ['limit1', 'limit2', 'deductible']
   
     premium = serializers.IntegerField(min_value = 0)
     modifier = serializers.ChoiceField(choices)
@@ -102,4 +102,3 @@ class SubmissionDataSetSerializer(serializers.Serializer):
 class SubmissionResponseSetSerializer(serializers.Serializer):
     cpl_submission = CPLSubmissionResponseSerializer(required = False)
     professional_submission = ProfessionalSubmissionResponseSerializer(required = False)
-    

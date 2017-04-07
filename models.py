@@ -112,7 +112,13 @@ class State(models.Model):
     
     def __str__(self):
         return "State: %s" % (self.state)
-  
+
+#Saving ratings
+
+class SubmissionBaseRate(models.Model):
+    iso_code = models.PositiveIntegerField()  
+    iso_description = models.CharField(max_length = 140)
+    class_relativity = models.DecimalField(max_digits = 3, decimal_places = 2)
   
   
   
