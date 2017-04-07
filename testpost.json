@@ -1,6 +1,6 @@
 {
 	"cpl_submission": {
-		"contractor_classes": [{
+		"base_rating_classes": [{
 				"iso_code": 94444,
 				"revenue": 800000,
 				"mold_hazard_group": "low"
@@ -20,6 +20,27 @@
 			"primary_nose_coverage": 1,
 			"mold_nose_coverage": 1,
 			"deductible" : 10000
+		}
+	},
+	"professional_submission": {
+		"base_rating_classes": [{
+				"iso_code": 111111,
+				"revenue": 800000
+			}, {
+				"iso_code": 222222,
+				"revenue": 700000
+			}, {
+				"iso_code": 333333,
+				"revenue": 600000
+			}
+		],
+		"manual_rate": {
+			"limit1": 1000000,
+			"limit2" : 1000000,
+			"aggregate_deductible_multiplier": 1,
+			"state": "Virginia",
+			"deductible" : 10000,
+			"prior_acts_years" :1
 		}
 	}
 }
