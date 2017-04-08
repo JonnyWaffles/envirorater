@@ -125,6 +125,10 @@ class State(models.Model):
 #Note model is abstract, instances need to set a submission = foreignkey to sub model relatonship.
 
 class SubmissionBaseRate(models.Model):
+    #Override this value in child classes
+    base_rate_class = None
+    revenue_class = None
+    
     iso_code = models.PositiveIntegerField()  
     iso_description = models.CharField(max_length = 140, blank = True)
     iso_factor = models.DecimalField(max_digits = 3, decimal_places = 2, blank = True)
@@ -132,8 +136,24 @@ class SubmissionBaseRate(models.Model):
     revenue_band_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1, blank = True)
     premium = models.PositiveIntegerField(default = 0, blank = True) 
     
+    def get_iso_description(self):
+        base_rate_object = self.base_rate_class.objects.get(iso_code__iexact = self.iso_code)
+        return = self.base_rate_object.iso_description
+    
+    def get_iso_factor(self):
+        base_rate_object = self.base_rate_class.objects.get(iso_code__iexact = self.iso_code)
+        return self.base_rate_object.factor
+    
+    def get_revenue_band_factor(self):
+        base_rate_object = self.revenue_class.objects.get(start__lt = revenue, end__gte = revenue)
+        return = self.base_rate_object.factor
+    
+    def get_premium(self):
+        return self.base_rate_class.get_premium(self.revenue)
+        
     class Meta:
         abstract = True
+        
 
 class SubmissionManualRate(models.Model):
     limit1 = models.PositiveIntegerField(default = 1000000)
@@ -143,16 +163,55 @@ class SubmissionManualRate(models.Model):
     deductible_factor = models.DecimalField(max_digits = 4, decimal_places = 3, blank = True)
     total_premium = models.PositiveIntegerField(default = 0, blank = True) 
     
+    def get_limit_factor(self):
+        limit = Limit.objects.get(limit1__iexact = factor_dict['limit1'], limit2__iexact = factor_dict['limit2']).factor
+        return = limit.factor
+
+    def get_deductible_factor(self):
+        deductible = Deductible.objects.get(deductible__iexact = self.deductible)
+        return = deductible.factor
+        
     class Meta:
         abstract = True
         
 class CPLSubmissionBaseRate(SubmissionBaseRate):
+    base_rate_class = ContractorClass
+    revenue_class = ContractorsPollutionRevenueBand    
     mold_hazard_group = models.CharField(max_length = 20, default = "Low", blank = True)
-    mold_hazard_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 0.050, blank = True)    
+    mold_hazard_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 0.050, blank = True) 
+    premium_ex_mold = models.PositiveIntegerField(default = 0, blank = True)
+    mold_premium = models.PositiveIntegerField(default = 0, blank = True)
     submission = models.ForeignKey('CPLSubmission', on_delete = models.CASCADE, related_name = 'base_rating_classes')
     
+    def get_mold_hazard_factor(self):
+        mold_hazard_group = MoldHazardGroup.objects.get(hazard_group__iexact = self.mold_hazard_group)
+        return mold_hazard_group.factor        
+    
+    def update_all_factors(self):
+        self.iso_description = self.get_iso_description()
+        self.iso_factor = self.get_iso_factor()
+        self.revenue_band_factor = self.get_revenue_band_factor()
+        self.mold_hazard_factor = self.get_mold_hazard_factor()
+        
+    def get_premium_ex_mold(self):
+        return self.base_rate_class.get_premium_ex_mold(self.revenue)
+    
+    def get_mold_premium(self):
+        return self.base_rate_class.get_mold_premium(self.revenue)
+    
+    def update_all_premiums(self):
+        self.premium_ex_mold = self.get_premium_ex_mold()
+        self.mold_premium = self.get_mold_premium()
+        self.premium = self.get_premium()        
+    
 class ProfessionalSubmissionBaseRate(SubmissionBaseRate):
+    base_rate_class = ProfessionalClass
+    revenue_class = ProfessionalRevenueBand
+    
     submission = models.ForeignKey('ProfessionalSubmission', on_delete = models.CASCADE, related_name = 'base_rating_classes')
+    
+    def update_all_premiums(self):
+        self.premium = self.get_premium()
     
 class CPLSubmissionManualRate(SubmissionManualRate):
     primary_nose_coverage = models.PositiveIntegerField(default = 0, blank = True)
@@ -160,6 +219,16 @@ class CPLSubmissionManualRate(SubmissionManualRate):
     mold_nose_coverage = models.PositiveIntegerField(default = 0, blank = True)
     mold_nose_coverage_factor = models.DecimalField(max_digits = 4, decimal_places = 3, blank = True)
     submission = models.ForeignKey('CPLSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')
+    
+    def get_primary_nose_coverage_factor(self):
+        nose = Nose.objects.get(primary_nose_coverage__iexact = self.primary_nose_coverage)
+        return nose.factor
+    
+    def get_mold_nose_coverage_factor(self):
+        nose = Nose.objects.get(primary_nose_coverage__iexact = self.mold_nose_coverage)
+        return nose.factor
+    
+    def 
     
 class ProfessionalSubmissionManualRate(SubmissionManualRate):
     aggregate_deductible_multiplier = models.PositiveIntegerField(default = 1, blank = True)
@@ -194,6 +263,36 @@ class SubmissionSet(models.Model):
     )
     last_saved = models.DateField(auto_now = True)
     
+#come back to this 
+
+class PremiumModifier: #Or, Manual rate cleaner try number 2?
+    models_module = importlib.import_module("envirorater.models")
+  
+    @staticmethod
+    def mod_premium(premium, **factor_dict):
+        def get_rating_factors(**factor_dict):
+            #Check for various types, we can add more later as needed.  Excess k:v
+            #pairs will be ignored
+            #Also map the types to their respective models
+            factor_types = {'deductible' : 'Deductible', 'primary_nose_coverage' : 'Nose', 'mold_nose_coverage' : 'Nose', 
+                              'aggregate_deductible_multiplier' : 'Aggregate', 'state' : 'State', 'prior_acts_years' : 'PriorActs' }
+            factor_value_dict = {}
+            for k in factor_dict:
+                if k in factor_types.keys():
+                    query = {'{0}__iexact'.format(k) : factor_dict[k]}
+                    factor = getattr(PremiumModifier.models_module, factor_types[k]).objects.get(**query).factor
+                    factor_value_dict.update({k : factor})
+              #Limit factor is a special case that needs two values from the
+              #dictionary, so we get it outside of the prior statements since we need
+              #both
+                if 'limit1' in factor_dict.keys() and 'limit2' in factor_dict.keys():
+                    limit_factor = Limit.objects.get(limit1__iexact = factor_dict['limit1'], limit2__iexact = factor_dict['limit2']).factor
+                    factor_value_dict.update({'limit' : limit_factor})
+            return factor_value_dict    
+        factor_value_dict = get_rating_factors(**factor_dict)
+        for factor in factor_value_dict.values():
+            premium = premium * factor
+        return premium
     
     
     
