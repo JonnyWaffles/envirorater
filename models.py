@@ -5,22 +5,33 @@ from django.conf import settings
 from django.utils import timezone
 from decimal import Decimal
 # Create your models here.
-#I should have made abstract base classes for BaseRateClass (ContractorClass and ProfessionalClass)
-#and RevenueBand, but I don't want to have to rebuild those tables during testing...
 
 #These are look up tables. We don't want to save references to the look up tables in the object model,
-#Because they could change. We need to save the historical data.
+#Because the factors could change. We need to save the historical data.
+class FactorLookUpTable(models.Model):
+    #An abstract parent class for all look up models with factor values
+    factor = models.DecimalField(max_digits = 3, decimal_places = 2)
 
-class ContractorClass(models.Model):
+    def return_factor(self):
+        return self.factor
+
+    class Meta:
+        abstract = True
+
+class BaseRatingUnit(models.Model):
+
     iso_code = models.PositiveIntegerField(primary_key = True)  
     iso_description = models.CharField(max_length = 140)
-    #Renaming 'class_relativity' to 'factor' for consistency
-    factor = models.DecimalField(max_digits = 3, decimal_places = 2)
-  
+    #Using 'factor' over class_relativity' for consistency
+
     def __str__(self):
         return "ISO Code: %s Description: %s" % (self.iso_code, self.iso_description)
-  #Can refactor this later since the only difference between this and the professional liability is
-  #The mold premium
+
+    class Meta:
+        abstract = True
+
+class ContractorClass(BaseRatingUnit, FactorLookUpTable):
+    
     def get_premium_ex_mold(self, revenue = 0):
         revenue_band = ContractorsPollutionRevenueBand.objects.get(start__lt = revenue, end__gte = revenue)
         marginal_premium = (revenue - revenue_band.start) * revenue_band.factor / 1000
@@ -36,13 +47,7 @@ class ContractorClass(models.Model):
     def get_total_premium(self, revenue = 0, mold_hazard_group = "low"):
         return ContractorClass.get_premium_ex_mold(self, revenue) + ContractorClass.get_mold_premium(self, revenue, mold_hazard_group)
 
-class ProfessionalClass(models.Model):
-    iso_code = models.PositiveIntegerField(primary_key = True)
-    iso_description = models.CharField(max_length = 140)
-    factor = models.DecimalField(max_digits = 3, decimal_places = 2)
-  
-    def __str__(self):
-        return "ISO Code: %s Description: %s" % (self.iso_code, self.iso_description)
+class ProfessionalClass(BaseRatingUnit, FactorLookUpTable):
   
     def get_premium(self, revenue = 0):
         revenue_band = ProfessionalRevenueBand.objects.get(start__lt = revenue, end__gte = revenue)
@@ -50,70 +55,70 @@ class ProfessionalClass(models.Model):
         premium = (revenue_band.cumulative_premium + marginal_premium) * self.factor
         return premium
 
-class ContractorsPollutionRevenueBand(models.Model):
+class RevenueBand(models.Model):
+
     start = models.PositiveIntegerField()
     end = models.PositiveIntegerField()
     cumulative_premium = models.PositiveIntegerField()
-    factor = models.DecimalField(max_digits = 4, decimal_places = 3)
-  
-    def __str__(self):
-        return "%s - %s Factor: %s" % (self.start, self.end, self.factor)
-    
-class ProfessionalRevenueBand(models.Model):
-    start = models.PositiveIntegerField()
-    end = models.PositiveIntegerField()
-    cumulative_premium = models.PositiveIntegerField()
-    factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1)
-  
+
     def __str__(self):
         return "%s - %s Factor: %s" % (self.start, self.end, self.factor)
 
-class MoldHazardGroup(models.Model):
-    hazard_group = models.CharField(max_length = 20)
-    factor = models.DecimalField(max_digits = 4, decimal_places = 3)
+    class Meta:
+        abstract = True
+
+class ContractorsPollutionRevenueBand(RevenueBand, FactorLookUpTable):
+    pass
+    
+class ProfessionalRevenueBand(RevenueBand, FactorLookUpTable):
+    pass
+
+class MoldHazardGroup(FactorLookUpTable):
+
+    mold_hazard_group = models.CharField(max_length = 20)
   
     def __str__(self):
         return "Group: %s - Factor: %s" % (self.hazard_group, self.factor)
 
-class Limit(models.Model):
+class Limit(FactorLookUpTable):
+
     limit1 = models.PositiveIntegerField(default = 1000000)
     limit2 = models.PositiveIntegerField(default = 1000000) 
-    factor = models.DecimalField(max_digits = 4, decimal_places = 3)
     minimum_premium = models.PositiveIntegerField(default = 500)
   
     def __str__(self):
         return "%s/%s" % (self.limit1, self.limit2)
 
-class Deductible(models.Model):
+class Deductible(FactorLookUpTable):
+
     deductible = models.PositiveIntegerField()
-    factor = models.DecimalField(max_digits = 4, decimal_places = 3)
   
     def __str__(self):
         return "%s" % (self.deductible)
 
-class Aggregate(models.Model):
-    aggregate_deductible_multiplier = models.PositiveIntegerField()
-    factor = models.DecimalField(max_digits = 4, decimal_places = 3)
+class Aggregate(FactorLookUpTable):
 
-class Nose(models.Model):
+    aggregate_deductible_multiplier = models.PositiveIntegerField()
+
+class Nose(FactorLookUpTable):
+
     primary_nose_coverage = models.PositiveIntegerField()
     mold_nose_coverage = models.PositiveIntegerField()
     years = models.PositiveIntegerField()
-    factor = models.DecimalField(max_digits = 4, decimal_places = 3)
   
     def __str__(self):
         return "%s" % (self.years)
 
-class PriorActs(models.Model):
+class PriorActs(FactorLookUpTable):
+
     prior_acts_years = models.CharField(max_length = 10)
-    factor = models.DecimalField(max_digits = 4, decimal_places = 3)
   
     def __str__(self):
         return "Years: %s" % (self.prior_acts_years)
 
-class State(models.Model):
+class State(FactorLookUpTable):
+
     state = models.CharField(max_length = 20)
-    factor = models.DecimalField(max_digits = 4, decimal_places = 3)
     
     def __str__(self):
         return "State: %s" % (self.state)
@@ -123,7 +128,6 @@ class State(models.Model):
 #Save "values" only!
 
 #Note model is abstract, instances need to set a submission = foreignkey to sub model relatonship.
-
 class SubmissionBaseRate(models.Model):
     #Override this value in child classes
     base_rate_class = None
@@ -138,7 +142,7 @@ class SubmissionBaseRate(models.Model):
     
     def get_iso_description(self):
         base_rate_object = self.base_rate_class.objects.get(iso_code__iexact = self.iso_code)
-        return = self.base_rate_object.iso_description
+        return self.base_rate_object.iso_description
     
     def get_iso_factor(self):
         base_rate_object = self.base_rate_class.objects.get(iso_code__iexact = self.iso_code)
@@ -146,91 +150,144 @@ class SubmissionBaseRate(models.Model):
     
     def get_revenue_band_factor(self):
         base_rate_object = self.revenue_class.objects.get(start__lt = revenue, end__gte = revenue)
-        return = self.base_rate_object.factor
-    
-    def get_premium(self):
-        return self.base_rate_class.get_premium(self.revenue)
+        return self.base_rate_object.factor
         
     class Meta:
         abstract = True
         
 
 class SubmissionManualRate(models.Model):
+
     limit1 = models.PositiveIntegerField(default = 1000000)
     limit2 = models.PositiveIntegerField(default = 1000000)
     limit_factor = models.DecimalField(max_digits = 3, decimal_places = 2, blank = True)
     deductible = models.PositiveIntegerField(default = 10000)
-    deductible_factor = models.DecimalField(max_digits = 4, decimal_places = 3, blank = True)
-    total_premium = models.PositiveIntegerField(default = 0, blank = True) 
+    deductible_factor = models.DecimalField(max_digits = 4, decimal_places = 3, blank = True, default = 1)
+    total_premium = models.PositiveIntegerField(default = 0, blank = True)
     
-    def get_limit_factor(self):
-        limit = Limit.objects.get(limit1__iexact = factor_dict['limit1'], limit2__iexact = factor_dict['limit2']).factor
-        return = limit.factor
+    #Register the factors and their respective Lookup Class here.
+    factor_types = {'deductible' : Deductible, 'primary_nose_coverage' : Nose, 'mold_hazard_group' : MoldHazardGroup,
+                    'mold_nose_coverage' : Nose, 'aggregate_deductible_multiplier' : Aggregate, 'state' : State,
+                    'prior_acts_years' : PriorActs, 'limit1' : Limit, 'limit2' : Limit}
 
-    def get_deductible_factor(self):
-        deductible = Deductible.objects.get(deductible__iexact = self.deductible)
-        return = deductible.factor
-        
+    @classmethod
+    def register_factor_type(cls, factor_type):
+        for factor_name, factor_class in factor_type.items():
+            if isinstance(factor_name[factor_class], FactorLookUpTable):
+                cls.factor_types.update(factor_type)
+            else:
+                raise TypeError("Only FactorLookupTables can be registered as factor_types")
+
+    #This helper function accepts a dictionary of factor look up value arguments and returns a dictionary of 
+    #type_factor : factor_value items. So if {'deductible' : 10000} is provided {'deductible_factor' : 1} returns.
+    @staticmethod
+    def get_factor_values(factor_dictionary):
+
+        factor_value_dict = {}
+        for factor in factor_dictionary.keys():
+            #Check to make sure the factor requested is an allowed factor type.            
+            if factor in SubmissionManualRate.factor_types.keys:
+                #Limit factor is a special case because it needs two values from the
+                #calling object
+                if 'limit1' in factor_list and 'limit2' in factor_list:
+                    limit = Limit.objects.get(limit1__iexact = factor_value_dict['limit1'],
+                                              limit2__iexact = factor_value_dict['limit2'])
+                    factor_value_dict.update( {'limit_factor' : limit.factor} )
+                    #Remove the limits once we're done with them from the list so 
+                    #they do not trigger twice.
+                    factor_list.pop('limit1')
+                    factor_list.pop('limit2')
+                
+                query = {'{0}__iexact'.format(factor) : factor_value_dict[factor]}
+                factor_lookup_table = SubmissionManualRate.factor_types[factor].objects.get(**query)
+                factor_value_dict.update( {'{0}_factor'.format(factor) : factor_lookup_table.factor} )
+        return factor_value_dict
+    
+    #This helper function returns a dictionary of a ManualRate instance's factor attributes and their values
+    #So we can look up the values with get_factor_values()
+    def get_factor_attributes(self):
+        factor_dictionary = {}
+        #We only want factor attributes
+        factor_list = dir(self)
+        for f in factor_list:
+            if f in SubmissionManualRate.factor_types:
+                factor_list.update( {f : getattr(self, f)} )
+        return factor_dictionary
+
+    #This function sets the instances factor_type attributes using its factor values
+    def set_factor_values(self):
+        factor_dict = get_factor_attributes(self)
+        factor_value_dict = get_factor_values(factor_dict)
+        for k, v in factor_value_dict.items():
+            setattr(self, k, v)      
+    
+    #This static method takes either a manual_rate instance or a factor_dictionary and returns a premium.
+    @staticmethod
+    def mod_premium(premium = 0, manual_rate = None, factor_dictionary = None):
+        if not manual_rate and not factor_dictionary:
+            raise ValueError("Mod premium requires a manual_rate instances or a factor_dictionary")
+
+        if manual_rate and factor_dictionary:
+            raise ValueError("Both a manual_rate instance and a factor_dictionary provided. Use one, not both.")
+
+        assert isinstance(manual_rate, SubmissionManualRate), "manual_rate must be a ManualRate instance."
+
+        if manual_rate:
+            factor_dictionary = manual_rate.get_factor_attributes(manual_rate)
+
+        factor_value_dict = manual_rate.get_factor_values(factor_dictionary)
+        for factor in factor_dictionary.values():
+            premium *= factor
+        return premium   
+   
     class Meta:
         abstract = True
         
 class CPLSubmissionBaseRate(SubmissionBaseRate):
+    #Set the appropriate classes
     base_rate_class = ContractorClass
-    revenue_class = ContractorsPollutionRevenueBand    
+    revenue_class = ContractorsPollutionRevenueBand
+    
     mold_hazard_group = models.CharField(max_length = 20, default = "Low", blank = True)
     mold_hazard_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 0.050, blank = True) 
     premium_ex_mold = models.PositiveIntegerField(default = 0, blank = True)
     mold_premium = models.PositiveIntegerField(default = 0, blank = True)
     submission = models.ForeignKey('CPLSubmission', on_delete = models.CASCADE, related_name = 'base_rating_classes')
-    
-    def get_mold_hazard_factor(self):
-        mold_hazard_group = MoldHazardGroup.objects.get(hazard_group__iexact = self.mold_hazard_group)
-        return mold_hazard_group.factor        
-    
-    def update_all_factors(self):
-        self.iso_description = self.get_iso_description()
-        self.iso_factor = self.get_iso_factor()
-        self.revenue_band_factor = self.get_revenue_band_factor()
-        self.mold_hazard_factor = self.get_mold_hazard_factor()
         
     def get_premium_ex_mold(self):
         return self.base_rate_class.get_premium_ex_mold(self.revenue)
     
     def get_mold_premium(self):
         return self.base_rate_class.get_mold_premium(self.revenue)
+
+    def get_total_premium(self):
+        return self.base_rate_class.total_premium(self.revenue)
     
     def update_all_premiums(self):
         self.premium_ex_mold = self.get_premium_ex_mold()
         self.mold_premium = self.get_mold_premium()
-        self.premium = self.get_premium()        
+        self.premium = self.get_total_premium()
     
 class ProfessionalSubmissionBaseRate(SubmissionBaseRate):
+
     base_rate_class = ProfessionalClass
     revenue_class = ProfessionalRevenueBand
     
     submission = models.ForeignKey('ProfessionalSubmission', on_delete = models.CASCADE, related_name = 'base_rating_classes')
-    
+
     def update_all_premiums(self):
-        self.premium = self.get_premium()
+        self.premium = self.base_rate_class.get_premium(self.revenue)
     
 class CPLSubmissionManualRate(SubmissionManualRate):
+
     primary_nose_coverage = models.PositiveIntegerField(default = 0, blank = True)
     primary_nose_coverage_factor = models.DecimalField(max_digits = 4, decimal_places = 3, blank = True)
     mold_nose_coverage = models.PositiveIntegerField(default = 0, blank = True)
     mold_nose_coverage_factor = models.DecimalField(max_digits = 4, decimal_places = 3, blank = True)
     submission = models.ForeignKey('CPLSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')
     
-    def get_primary_nose_coverage_factor(self):
-        nose = Nose.objects.get(primary_nose_coverage__iexact = self.primary_nose_coverage)
-        return nose.factor
-    
-    def get_mold_nose_coverage_factor(self):
-        nose = Nose.objects.get(primary_nose_coverage__iexact = self.mold_nose_coverage)
-        return nose.factor
-    
-    def 
-    
 class ProfessionalSubmissionManualRate(SubmissionManualRate):
+
     aggregate_deductible_multiplier = models.PositiveIntegerField(default = 1, blank = True)
     aggregate_deductible_multiplier_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1.000, blank = True)
     state = models.CharField(max_length = 20, default = 'Virginia', blank = True)
@@ -239,17 +296,37 @@ class ProfessionalSubmissionManualRate(SubmissionManualRate):
     prior_acts_years_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1.000, blank = True)
     submission = models.ForeignKey('ProfessionalSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')
 
+#Abstract class just to type the specific submissions as submissions
 class Submission(models.Model):
-    submission_total_premium = models.PositiveIntegerField(default = 0, blank = True) 
-    
+
     class Meta:
         abstract = True
         
 class CPLSubmission(Submission):
-    pass
+
+    def get_base_unit_totals(self):
+
+        total_premium_ex_mold = 0
+        total_mold_premium = 0
+        
+        for base_rating_unit in self.base_rating_classes:
+            total_premium_ex_mold += base_rating_unit.premium_ex_mold
+            total_mold_premium += base_rating_unit.mold_premium
+            total_premium = self.total_premium_ex_mold + self.total_mold_premium
+
+        return {'total_premium_ex_mold' : total_premium_ex_mold,
+                'total_mold_premium' : total_mold_premium,
+                'total_premium' : total_premium}
+
 
 class ProfessionalSubmission(Submission):
-    pass
+
+    def get_base_unit_totals(self):
+
+        total_premium = 0
+
+        for base_rating_unit in self.base_rating_classes:
+            total_premium += base_rating_unit.premium
 
 class SubmissionSet(models.Model):
     cpl_submission = models.OneToOneField('CPLSubmission', on_delete = models.CASCADE, blank = True, null = True, related_name = 'submission_set')
@@ -262,43 +339,4 @@ class SubmissionSet(models.Model):
         blank = True
     )
     last_saved = models.DateField(auto_now = True)
-    
-#come back to this 
-
-class PremiumModifier: #Or, Manual rate cleaner try number 2?
-    models_module = importlib.import_module("envirorater.models")
-  
-    @staticmethod
-    def mod_premium(premium, **factor_dict):
-        def get_rating_factors(**factor_dict):
-            #Check for various types, we can add more later as needed.  Excess k:v
-            #pairs will be ignored
-            #Also map the types to their respective models
-            factor_types = {'deductible' : 'Deductible', 'primary_nose_coverage' : 'Nose', 'mold_nose_coverage' : 'Nose', 
-                              'aggregate_deductible_multiplier' : 'Aggregate', 'state' : 'State', 'prior_acts_years' : 'PriorActs' }
-            factor_value_dict = {}
-            for k in factor_dict:
-                if k in factor_types.keys():
-                    query = {'{0}__iexact'.format(k) : factor_dict[k]}
-                    factor = getattr(PremiumModifier.models_module, factor_types[k]).objects.get(**query).factor
-                    factor_value_dict.update({k : factor})
-              #Limit factor is a special case that needs two values from the
-              #dictionary, so we get it outside of the prior statements since we need
-              #both
-                if 'limit1' in factor_dict.keys() and 'limit2' in factor_dict.keys():
-                    limit_factor = Limit.objects.get(limit1__iexact = factor_dict['limit1'], limit2__iexact = factor_dict['limit2']).factor
-                    factor_value_dict.update({'limit' : limit_factor})
-            return factor_value_dict    
-        factor_value_dict = get_rating_factors(**factor_dict)
-        for factor in factor_value_dict.values():
-            premium = premium * factor
-        return premium
-    
-    
-    
-
-
- 
-  
-  
-  
+    created_on = models.DateField(auto_now_add = True)
