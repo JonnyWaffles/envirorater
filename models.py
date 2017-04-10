@@ -298,6 +298,7 @@ class ProfessionalSubmissionManualRate(SubmissionManualRate):
 
 #Abstract class just to type the specific submissions as submissions
 class Submission(models.Model):
+    insured_name = models.CharField(max_length = 140, default = 'Default Named Insured', blank = True)
 
     class Meta:
         abstract = True
@@ -332,7 +333,7 @@ class SubmissionSet(models.Model):
     cpl_submission = models.OneToOneField('CPLSubmission', on_delete = models.CASCADE, blank = True, null = True, related_name = 'submission_set')
     professional_submission = models.OneToOneField('ProfessionalSubmission', on_delete = models.CASCADE, blank = True, null = True, related_name = 'submission_set')
     bound = models.BooleanField(default = False, blank = True)
-    user = models.ForeignKey(
+    owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null = True,

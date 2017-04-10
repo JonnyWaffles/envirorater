@@ -1,11 +1,17 @@
-from django.conf.urls import url
+from django.conf.urls import url, include
+from rest_framework import routers, serializers, viewsets
+from rest_framework.urlpatterns import format_suffix_patterns
 
-from .views import Index, ContractorBaseRateAPI, ProfessionalBaseRateAPI, PremiumModifierAPI, SubmissionAPI
+from .views import Index, SubmissionViewSet, ContractorClassViewSet, ProfessionalClassViewSet, PremiumModifierAPI, UserViewSet
+
+router = routers.DefaultRouter()
+
+router.register(r'submissions', SubmissionViewSet, base_name = "submissions")
+router.register(r'contractors', ContractorClassViewSet)
+router.register(r'professionals', ProfessionalClassViewSet)
+router.register(r'users', UserViewSet)
 
 urlpatterns = [
-    url(r'^$', Index.as_view(), name='index'),
-    url(r'^api/$', SubmissionAPI.as_view(), name='submission-api'),
-    url(r'^api/contractor/$', ContractorBaseRateAPI.as_view(), name='contractor-base-rate-api'),
-    url(r'^api/professional/$', ProfessionalBaseRateAPI.as_view(), name='professional-base-rate-api'),
-    url(r'^api/factor/$', PremiumModifierAPI.as_view(), name='premium-modifier-api'),    
+    url(r'^factor/$', PremiumModifierAPI.as_view(), name='premium-modifier-api'),
+    url(r'^', include(router.urls)),
 ]

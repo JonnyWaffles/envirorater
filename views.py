@@ -10,12 +10,16 @@ from django.core.exceptions import ObjectDoesNotExist
 from decimal import Decimal
 from .forms import ContractorClassForm
 from .models import (CPLSubmissionBaseRate, ProfessionalSubmissionBaseRate, CPLSubmissionManualRate, ProfessionalSubmissionManualRate,
-                     CPLSubmission, ProfessionalSubmission, SubmissionSet)
-from .serializers import (ContractorClassSerializer, ProfessionalClassSerializer)
+                     CPLSubmission, ProfessionalSubmission, SubmissionSet, ContractorClass, ProfessionalClass)
+from .serializers import (ContractorClassSerializer, ProfessionalClassSerializer, CPLSubmissionBaseRateSerializer,
+						  ProfessionalSubmissionBaseRateSerializer, CPLSubmissionManualRateSerializer, ProfessionalSubmissionManualRateSerializer,
+						  CPLSubmissionSerializer, ProfessionalSubmissionSerializer, SubmissionSetSerializer, UserSerializer)
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator
 from django.contrib.auth import logout
+from django.contrib.auth.models import User
+from rest_framework.decorators import api_view
 from rest_framework.renderers import JSONRenderer
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
@@ -24,6 +28,7 @@ from rest_framework.exceptions import APIException
 from rest_framework import authentication, permissions
 from rest_framework import status
 from rest_framework.reverse import reverse
+from rest_framework import viewsets
 import rest_framework.serializers
 import importlib
 		
@@ -33,6 +38,40 @@ class Index(View):
         contractor_classes = ContractorClass.objects.all()    
         context = {"contractor_classes" : contractor_classes}    
         return render(request, 'envirorater/home.html', context)
+	
+@api_view(['GET'])
+def api_root(request, format=None):
+    return Response({
+		'users' : reverse('user-list', request=request, format=format),
+        'submissions': reverse('submissionset-list', request=request, format=format),
+        'contractors': reverse('contractors-list', request=request, format=format),
+		'professionals': reverse('professionals-list', request=request, format=format)
+    })
+
+class UserViewSet(viewsets.ModelViewSet):
+	
+	queryset = User.objects.all()
+	serializer_class = UserSerializer
+	permission_classes = (permissions.AllowAny, )
+	
+class SubmissionViewSet(viewsets.ModelViewSet):
+
+	queryset = SubmissionSet.objects.all().order_by('-created_on')[:5]
+	serializer_class = SubmissionSetSerializer
+	permission_classes = (permissions.AllowAny, )
+		
+class ContractorClassViewSet(viewsets.ReadOnlyModelViewSet):
+	"""
+	This viewset automatically provides 'list' and 'detail' actions.
+	"""
+	queryset = ContractorClass.objects.all()
+	serializer_class = ContractorClassSerializer
+	
+		
+class ProfessionalClassViewSet(viewsets.ReadOnlyModelViewSet):
+		
+	queryset = ProfessionalClass.objects.all()
+	serializer_class = ProfessionalClassSerializer
 
 class PremiumModifierAPI(APIView):
 	#I want a GET request with no arguments to return an options request
