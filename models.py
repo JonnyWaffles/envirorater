@@ -134,23 +134,23 @@ class SubmissionBaseRate(models.Model):
     revenue_class = None
     
     iso_code = models.PositiveIntegerField()  
-    iso_description = models.CharField(max_length = 140, blank = True)
-    iso_factor = models.DecimalField(max_digits = 3, decimal_places = 2, blank = True)
+    iso_description = models.CharField(max_length = 140, blank = True, null = True)
+    iso_factor = models.DecimalField(max_digits = 3, decimal_places = 2, default = 1, blank = True)
     revenue = models.PositiveIntegerField(default = 0)
     revenue_band_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1, blank = True)
     premium = models.PositiveIntegerField(default = 0, blank = True) 
     
     def get_iso_description(self):
         base_rate_object = self.base_rate_class.objects.get(iso_code__iexact = self.iso_code)
-        return self.base_rate_object.iso_description
+        return base_rate_object.iso_description
     
     def get_iso_factor(self):
         base_rate_object = self.base_rate_class.objects.get(iso_code__iexact = self.iso_code)
-        return self.base_rate_object.factor
+        return base_rate_object.factor
     
     def get_revenue_band_factor(self):
-        base_rate_object = self.revenue_class.objects.get(start__lt = revenue, end__gte = revenue)
-        return self.base_rate_object.factor
+        base_rate_object = self.revenue_class.objects.get(start__lt = self.revenue, end__gte = self.revenue)
+        return base_rate_object.factor
         
     class Meta:
         abstract = True
@@ -160,9 +160,9 @@ class SubmissionManualRate(models.Model):
 
     limit1 = models.PositiveIntegerField(default = 1000000)
     limit2 = models.PositiveIntegerField(default = 1000000)
-    limit_factor = models.DecimalField(max_digits = 3, decimal_places = 2, blank = True)
+    limit_factor = models.DecimalField(max_digits = 3, decimal_places = 2, default = 1, blank = True)
     deductible = models.PositiveIntegerField(default = 10000)
-    deductible_factor = models.DecimalField(max_digits = 4, decimal_places = 3, blank = True, default = 1)
+    deductible_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1, blank = True)
     total_premium = models.PositiveIntegerField(default = 0, blank = True)
     
     #Register the factors and their respective Lookup Class here.
@@ -281,9 +281,9 @@ class ProfessionalSubmissionBaseRate(SubmissionBaseRate):
 class CPLSubmissionManualRate(SubmissionManualRate):
 
     primary_nose_coverage = models.PositiveIntegerField(default = 0, blank = True)
-    primary_nose_coverage_factor = models.DecimalField(max_digits = 4, decimal_places = 3, blank = True)
+    primary_nose_coverage_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1, blank = True)
     mold_nose_coverage = models.PositiveIntegerField(default = 0, blank = True)
-    mold_nose_coverage_factor = models.DecimalField(max_digits = 4, decimal_places = 3, blank = True)
+    mold_nose_coverage_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1, blank = True)
     submission = models.ForeignKey('CPLSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')
     
 class ProfessionalSubmissionManualRate(SubmissionManualRate):
@@ -291,7 +291,7 @@ class ProfessionalSubmissionManualRate(SubmissionManualRate):
     aggregate_deductible_multiplier = models.PositiveIntegerField(default = 1, blank = True)
     aggregate_deductible_multiplier_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1.000, blank = True)
     state = models.CharField(max_length = 20, default = 'Virginia', blank = True)
-    state_factor =  models.DecimalField(max_digits = 4, decimal_places = 3, default = 1.000, blank = True)
+    state_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1.000, blank = True)
     prior_acts_years = models.CharField(max_length = 10, default = 'Full', blank = True)
     prior_acts_years_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1.000, blank = True)
     submission = models.ForeignKey('ProfessionalSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')

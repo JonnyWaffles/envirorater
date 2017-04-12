@@ -12,46 +12,46 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
 class ContractorClassSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContractorClass
-        fields = ( 'iso_code', 'iso_description')
-        #Note need to set up a 'contractor_class-detail' view name which receives
-        #iso_code rather than PK
-        
+        fields = ( 'iso_code', 'iso_description', 'url')
+        extra_kwargs = {
+            'url' : { 'lookup_field' : 'iso_code'}
+        }
     
 class ProfessionalClassSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProfessionalClass
-        fields = ( 'iso_code', 'iso_description')
+        fields = ( 'iso_code', 'iso_description', 'url')
         extra_kwargs = {
-            'url' : {'view_name' : 'contractor_class-detail', 'lookup_field' : 'iso_code'},
+            'url' : {'lookup_field' : 'iso_code'},
         }
         
-class CPLSubmissionBaseRateSerializer(serializers.HyperlinkedModelSerializer):
+class CPLSubmissionBaseRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = CPLSubmissionBaseRate
         exclude = ('iso_factor', 'revenue_band_factor', 'mold_hazard_factor', 'submission')
         read_only_fields = ('premium', 'mold_premium', 'premium_ex_mold')        
         
-class ProfessionalSubmissionBaseRateSerializer(serializers.HyperlinkedModelSerializer):
+class ProfessionalSubmissionBaseRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProfessionalSubmissionBaseRate
         exclude = ('iso_factor', 'revenue_band_factor', 'submission')
         read_only_fields = ('premium', )
         
-class CPLSubmissionManualRateSerializer(serializers.HyperlinkedModelSerializer):
+class CPLSubmissionManualRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = CPLSubmissionManualRate
         exclude = ('limit_factor', 'deductible_factor',
                    'primary_nose_coverage_factor', 'mold_nose_coverage_factor', 'submission')
         read_only_fields = ('total_premium', )
         
-class ProfessionalSubmissionManualRateSerializer(serializers.HyperlinkedModelSerializer):
+class ProfessionalSubmissionManualRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProfessionalSubmissionManualRate
         exclude = ('limit_factor', 'deductible_factor', 'aggregate_deductible_multiplier_factor',
                    'state_factor', 'prior_acts_years_factor', 'submission')
         read_only_fields = ('total_premium', )
         
-class CPLSubmissionSerializer(serializers.HyperlinkedModelSerializer):
+class CPLSubmissionSerializer(serializers.ModelSerializer):
     base_rating_classes = CPLSubmissionBaseRateSerializer(many = True)
     manual_rate = CPLSubmissionManualRateSerializer(required = False)
     #Note may also need to include a reference to submission_set here. Not sure yet.
@@ -61,7 +61,7 @@ class CPLSubmissionSerializer(serializers.HyperlinkedModelSerializer):
         fields = '__all__'  
         
         
-class ProfessionalSubmissionSerializer(serializers.HyperlinkedModelSerializer):
+class ProfessionalSubmissionSerializer(serializers.ModelSerializer):
     base_rating_classes = ProfessionalSubmissionBaseRateSerializer(many = True)
     manual_rate = ProfessionalSubmissionManualRateSerializer(required = False)
     #Note may also need to include a reference to submission_set here. Not sure yet.
@@ -70,11 +70,29 @@ class ProfessionalSubmissionSerializer(serializers.HyperlinkedModelSerializer):
         model = ProfessionalSubmission
         fields = '__all__'  
         
-class SubmissionSetSerializer(serializers.HyperlinkedModelSerializer):
+class SubmissionSetSerializer(serializers.ModelSerializer):
     cpl_submission = CPLSubmissionSerializer(required = False)
     professional_submission = ProfessionalSubmissionSerializer(required = False)
-    owner = UserSerializer
+    owner = UserSerializer(read_only = True)
     
+    def create(self, validated_data, owner = None, *args, **kwargs):
+        
+        submission_set = SubmissionSet.objects.create(owner = owner)
+        
+        if 'cpl_submission' in validated_data.keys():
+            cpl_submission = CPLSubmission.objects.create()            
+            for unit_data in validated_data['cpl_submission']['base_rating_classes']:
+                cpl_submission.base_rating_classes.add(CPLSubmissionBaseRate(**unit_data), bulk = False)
+            submission_set.cpl_submission = cpl_submission
+            
+        if 'professional_submission' in validated_data.keys():
+            professional_submission = ProfessionalSubmission.objects.create()
+            for unit_data in validated_data['professional_submission']['base_rating_classes']:
+                professional_submission.base_rating_classes.add(ProfessionalSubmissionBaseRate(**unit_data), bulk = False)
+            submission_set.professional_submission = professional_submission
+            
+        return submission_set      
+                 
     class Meta:
         model = SubmissionSet
         fields = '__all__'  

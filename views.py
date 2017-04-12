@@ -59,6 +59,17 @@ class SubmissionViewSet(viewsets.ModelViewSet):
 	queryset = SubmissionSet.objects.all().order_by('-created_on')[:5]
 	serializer_class = SubmissionSetSerializer
 	permission_classes = (permissions.AllowAny, )
+	
+	def create(self, request):
+		serializer = SubmissionSetSerializer(data = request.data)
+		if serializer.is_valid():
+			validated_data = serializer.data
+			submission_set = serializer.create(validated_data, owner = request.user)
+			print(submission_set)
+			
+			ret_subset = SubmissionSetSerializer(submission_set, context = {'request' : request})
+			return Response(ret_subset.data)
+		return Response(submission_set.error)
 		
 class ContractorClassViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
@@ -66,12 +77,14 @@ class ContractorClassViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
 	queryset = ContractorClass.objects.all()
 	serializer_class = ContractorClassSerializer
+	lookup_field = 'iso_code'
 	
 		
 class ProfessionalClassViewSet(viewsets.ReadOnlyModelViewSet):
 		
 	queryset = ProfessionalClass.objects.all()
 	serializer_class = ProfessionalClassSerializer
+	lookup_field = 'iso_code'
 
 class PremiumModifierAPI(APIView):
 	#I want a GET request with no arguments to return an options request
