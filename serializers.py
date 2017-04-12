@@ -75,27 +75,41 @@ class SubmissionSetSerializer(serializers.ModelSerializer):
     professional_submission = ProfessionalSubmissionSerializer(required = False)
     owner = UserSerializer(read_only = True)
     
-    def create(self, validated_data, owner = None, *args, **kwargs):
+    def create(self, validated_data, owner = None, raw = False, *args, **kwargs):
         
+        request = kwargs['context']['request']        
         submission_set = SubmissionSet.objects.create(owner = owner)
         
         if 'cpl_submission' in validated_data.keys():
             cpl_submission = CPLSubmission.objects.create()            
             for unit_data in validated_data['cpl_submission']['base_rating_classes']:
-                cpl_submission.base_rating_classes.add(CPLSubmissionBaseRate(**unit_data), bulk = False)
+                unit = CPLSubmissionBaseRate(**unit_data)
+                #Use the raw = True request keyword to keep the data from being recalculated
+                if raw:
+                    cpl_submission.base_rating_classes.add(unit, bulk = False)
+                else:
+                    unit.update_all_premiums()
+                    cpl_submission.base_rating_classes.add(unit, bulk = False)
             submission_set.cpl_submission = cpl_submission
             
         if 'professional_submission' in validated_data.keys():
             professional_submission = ProfessionalSubmission.objects.create()
             for unit_data in validated_data['professional_submission']['base_rating_classes']:
-                professional_submission.base_rating_classes.add(ProfessionalSubmissionBaseRate(**unit_data), bulk = False)
+                unit = ProfessionalSubmissionBaseRate(**unit_data)
+                if raw:
+                    professional_submission.base_rating_classes.add(unit, bulk = False)
+                else:
+                    unit.update_all_premiums()
+                    professional_submission.base_rating_classes.add(unit, bulk = False)
             submission_set.professional_submission = professional_submission
+            
+        submission_set.save()
             
         return submission_set      
                  
     class Meta:
         model = SubmissionSet
-        fields = '__all__'  
+        fields = '__all__'
         
 #Note we use the PremiumModifierAPISerializer for both requests and responses by changing the _premium field.
 class PremiumModifierAPISerializer(serializers.Serializer):

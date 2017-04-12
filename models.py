@@ -33,6 +33,8 @@ class BaseRatingUnit(models.Model):
 class ContractorClass(BaseRatingUnit, FactorLookUpTable):
     
     def get_premium_ex_mold(self, revenue = 0):
+        
+        print("ContractorClass get_premium_ex_mold self: {0}".format(self))
         revenue_band = ContractorsPollutionRevenueBand.objects.get(start__lt = revenue, end__gte = revenue)
         marginal_premium = (revenue - revenue_band.start) * revenue_band.factor / 1000
         class_premium_ex_mold = (revenue_band.cumulative_premium + marginal_premium) * self.factor
@@ -41,7 +43,7 @@ class ContractorClass(BaseRatingUnit, FactorLookUpTable):
     def get_mold_premium(self, revenue = 0, mold_hazard_group = "low"):
         revenue_band = ContractorsPollutionRevenueBand.objects.get(start__lt = revenue, end__gte = revenue)
         class_premium_ex_mold = ContractorClass.get_premium_ex_mold(self, revenue)
-        mold_hazard_group = MoldHazardGroup.objects.get(hazard_group__iexact = mold_hazard_group)
+        mold_hazard_group = MoldHazardGroup.objects.get(mold_hazard_group__iexact = mold_hazard_group)
         return class_premium_ex_mold * mold_hazard_group.factor
   
     def get_total_premium(self, revenue = 0, mold_hazard_group = "low"):
@@ -78,7 +80,7 @@ class MoldHazardGroup(FactorLookUpTable):
     mold_hazard_group = models.CharField(max_length = 20)
   
     def __str__(self):
-        return "Group: %s - Factor: %s" % (self.hazard_group, self.factor)
+        return "Group: %s - Factor: %s" % (self.mold_hazard_group, self.factor)
 
 class Limit(FactorLookUpTable):
 
@@ -140,17 +142,22 @@ class SubmissionBaseRate(models.Model):
     revenue_band_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1, blank = True)
     premium = models.PositiveIntegerField(default = 0, blank = True) 
     
-    def get_iso_description(self):
+    def get_base_rate_object(self):
         base_rate_object = self.base_rate_class.objects.get(iso_code__iexact = self.iso_code)
-        return base_rate_object.iso_description
+        return base_rate_object
+    
+    def get_revenue_band_object(self):
+        revenue_band_object = self.revenue_class.objects.get(start__lt = self.revenue, end__gte = self.revenue)
+        return revenue_band_object
+    
+    def get_iso_description(self):
+        return self.get_base_rate_object().iso_description
     
     def get_iso_factor(self):
-        base_rate_object = self.base_rate_class.objects.get(iso_code__iexact = self.iso_code)
-        return base_rate_object.factor
+        return self.get_base_rate_object().factor
     
     def get_revenue_band_factor(self):
-        base_rate_object = self.revenue_class.objects.get(start__lt = self.revenue, end__gte = self.revenue)
-        return base_rate_object.factor
+        return self.get_revenue_band_object().factor
         
     class Meta:
         abstract = True
@@ -253,20 +260,34 @@ class CPLSubmissionBaseRate(SubmissionBaseRate):
     premium_ex_mold = models.PositiveIntegerField(default = 0, blank = True)
     mold_premium = models.PositiveIntegerField(default = 0, blank = True)
     submission = models.ForeignKey('CPLSubmission', on_delete = models.CASCADE, related_name = 'base_rating_classes')
-        
+    
+    def get_mold_hazard_factor(self):
+        mold_hazard_group = MoldHazardGroup.objects.get(mold_hazard_group__iexact = self.mold_hazard_group)
+        return mold_hazard_group.factor
+    
     def get_premium_ex_mold(self):
-        return self.base_rate_class.get_premium_ex_mold(self.revenue)
+        base_rate_object = self.get_base_rate_object()
+        premium_ex_mold = base_rate_object.get_premium_ex_mold(self.revenue)
+        return premium_ex_mold
     
     def get_mold_premium(self):
-        return self.base_rate_class.get_mold_premium(self.revenue)
+        base_rate_object = self.get_base_rate_object()
+        mold_premium = base_rate_object.get_mold_premium(self.revenue)
+        return mold_premium
 
     def get_total_premium(self):
-        return self.base_rate_class.total_premium(self.revenue)
+        base_rate_object = self.get_base_rate_object()
+        total_premium = base_rate_object.get_total_premium(self.revenue)
+        return total_premium
     
     def update_all_premiums(self):
         self.premium_ex_mold = self.get_premium_ex_mold()
         self.mold_premium = self.get_mold_premium()
         self.premium = self.get_total_premium()
+        self.mold_hazard_factor = self.get_mold_hazard_factor()
+        self.iso_description = self.get_iso_description()
+        self.iso_factor = self.get_iso_factor()
+        self.revenue_band_factor = self.get_revenue_band_factor()
     
 class ProfessionalSubmissionBaseRate(SubmissionBaseRate):
 
@@ -276,7 +297,10 @@ class ProfessionalSubmissionBaseRate(SubmissionBaseRate):
     submission = models.ForeignKey('ProfessionalSubmission', on_delete = models.CASCADE, related_name = 'base_rating_classes')
 
     def update_all_premiums(self):
-        self.premium = self.base_rate_class.get_premium(self.revenue)
+        self.iso_description = self.get_iso_description()
+        self.iso_factor = self.get_iso_factor()
+        self.revenue_band_factor = self.get_revenue_band_factor()
+        self.premium = self.get_base_rate_object().get_premium(self.revenue)
     
 class CPLSubmissionManualRate(SubmissionManualRate):
 

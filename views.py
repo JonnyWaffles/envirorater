@@ -56,17 +56,18 @@ class UserViewSet(viewsets.ModelViewSet):
 	
 class SubmissionViewSet(viewsets.ModelViewSet):
 
-	queryset = SubmissionSet.objects.all().order_by('-created_on')[:5]
+	queryset = SubmissionSet.objects.all().order_by('-id')[:5]
 	serializer_class = SubmissionSetSerializer
 	permission_classes = (permissions.AllowAny, )
 	
 	def create(self, request):
+
+		raw = request.data.get('raw', False)		
 		serializer = SubmissionSetSerializer(data = request.data)
+		
 		if serializer.is_valid():
 			validated_data = serializer.data
-			submission_set = serializer.create(validated_data, owner = request.user)
-			print(submission_set)
-			
+			submission_set = serializer.create(validated_data, owner = request.user, raw = raw, context = {'request' : request})
 			ret_subset = SubmissionSetSerializer(submission_set, context = {'request' : request})
 			return Response(ret_subset.data)
 		return Response(submission_set.error)
