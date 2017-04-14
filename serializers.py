@@ -52,33 +52,46 @@ class ProfessionalSubmissionManualRateSerializer(serializers.ModelSerializer):
         read_only_fields = ('total_premium', )
         
 class CPLSubmissionSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
     base_rating_classes = CPLSubmissionBaseRateSerializer(many = True)
     manual_rate = CPLSubmissionManualRateSerializer(required = False)
-    #Note may also need to include a reference to submission_set here. Not sure yet.
+
+    def get_url(self, instance):
+        return instance.get_absolute_url(self.context['request'])
     
     class Meta:
         model = CPLSubmission
-        fields = '__all__'  
+        exclude = ('id', )
+        extra_kwargs = {
+            'url' : { 'lookup_field' : 'iso_code'}
+        }
         
         
 class ProfessionalSubmissionSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
     base_rating_classes = ProfessionalSubmissionBaseRateSerializer(many = True)
     manual_rate = ProfessionalSubmissionManualRateSerializer(required = False)
-    #Note may also need to include a reference to submission_set here. Not sure yet.
+    
+    def get_url(self, instance):
+        return instance.get_absolute_url(self.context['request'])
     
     class Meta:
         model = ProfessionalSubmission
-        fields = '__all__'  
-        
+        exclude = ('id', )
+
 class SubmissionSetSerializer(serializers.ModelSerializer):
+    insured_name = serializers.CharField(required = False)
+    url = serializers.HyperlinkedIdentityField(view_name='submissions-detail')
     cpl_submission = CPLSubmissionSerializer(required = False)
     professional_submission = ProfessionalSubmissionSerializer(required = False)
-    owner = UserSerializer(read_only = True)
+    owner = UserSerializer(read_only = True)   
     
-    def create(self, validated_data, owner = None, raw = False, *args, **kwargs):
+    def create(self, validated_data, owner = None, *args, **kwargs):
         
-        request = kwargs['context']['request']        
+        request = kwargs['context']['request']  
+        raw = request.data.get('raw', False)
         submission_set = SubmissionSet.objects.create(owner = owner)
+        
         
         if 'cpl_submission' in validated_data.keys():
             cpl_submission = CPLSubmission.objects.create()            
@@ -105,7 +118,20 @@ class SubmissionSetSerializer(serializers.ModelSerializer):
             
         submission_set.save()
             
-        return submission_set      
+        return submission_set
+    
+    def update(self, instance, validated_data, *args, **kwargs):
+        
+        request = kwargs['context']['request']  
+        raw = request.data.get('raw', False)
+        
+        instance.insured_name = validated_data.get('insured_name', instance.insured_name)
+        instance.bound = validated_data.get('bound', instance.bound)
+        
+        if 'cpl_submission' in validated_data.keys():
+            if instance.cpl_submission:
+                cpl_submission = instance.cpl_submission
+                
                  
     class Meta:
         model = SubmissionSet

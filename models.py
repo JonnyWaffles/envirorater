@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from rest_framework.reverse import reverse
 from decimal import Decimal
 # Create your models here.
 
@@ -322,7 +323,6 @@ class ProfessionalSubmissionManualRate(SubmissionManualRate):
 
 #Abstract class just to type the specific submissions as submissions
 class Submission(models.Model):
-    insured_name = models.CharField(max_length = 140, default = 'Default Named Insured', blank = True)
 
     class Meta:
         abstract = True
@@ -342,6 +342,10 @@ class CPLSubmission(Submission):
         return {'total_premium_ex_mold' : total_premium_ex_mold,
                 'total_mold_premium' : total_mold_premium,
                 'total_premium' : total_premium}
+    
+    def get_absolute_url(self, request = None):
+        set_id = self.submission_set.id
+        return reverse('cpl-details', kwargs={'submission_set' : set_id}, request = request)
 
 
 class ProfessionalSubmission(Submission):
@@ -352,8 +356,15 @@ class ProfessionalSubmission(Submission):
 
         for base_rating_unit in self.base_rating_classes:
             total_premium += base_rating_unit.premium
+            
+    def get_absolute_url(self, request):
+        set_id = self.submission_set.id
+        return reverse('pro-details', kwargs={'submission_set' : set_id}, request = request)
+        
+    
 
 class SubmissionSet(models.Model):
+    insured_name = models.CharField(max_length = 140, default = 'Default Named Insured', blank = True)
     cpl_submission = models.OneToOneField('CPLSubmission', on_delete = models.CASCADE, blank = True, null = True, related_name = 'submission_set')
     professional_submission = models.OneToOneField('ProfessionalSubmission', on_delete = models.CASCADE, blank = True, null = True, related_name = 'submission_set')
     bound = models.BooleanField(default = False, blank = True)

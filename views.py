@@ -10,7 +10,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from decimal import Decimal
 from .forms import ContractorClassForm
 from .models import (CPLSubmissionBaseRate, ProfessionalSubmissionBaseRate, CPLSubmissionManualRate, ProfessionalSubmissionManualRate,
-                     CPLSubmission, ProfessionalSubmission, SubmissionSet, ContractorClass, ProfessionalClass)
+                     CPLSubmission, ProfessionalSubmission, SubmissionSet, ContractorClass, ProfessionalClass, Submission)
 from .serializers import (ContractorClassSerializer, ProfessionalClassSerializer, CPLSubmissionBaseRateSerializer,
 						  ProfessionalSubmissionBaseRateSerializer, CPLSubmissionManualRateSerializer, ProfessionalSubmissionManualRateSerializer,
 						  CPLSubmissionSerializer, ProfessionalSubmissionSerializer, SubmissionSetSerializer, UserSerializer)
@@ -56,7 +56,7 @@ class UserViewSet(viewsets.ModelViewSet):
 	
 class SubmissionViewSet(viewsets.ModelViewSet):
 
-	queryset = SubmissionSet.objects.all().order_by('-id')[:5]
+	queryset = SubmissionSet.objects.all().order_by('-id')
 	serializer_class = SubmissionSetSerializer
 	permission_classes = (permissions.AllowAny, )
 	
@@ -66,11 +66,91 @@ class SubmissionViewSet(viewsets.ModelViewSet):
 		serializer = SubmissionSetSerializer(data = request.data)
 		
 		if serializer.is_valid():
-			validated_data = serializer.data
-			submission_set = serializer.create(validated_data, owner = request.user, raw = raw, context = {'request' : request})
+			validated_data = serializer.validated_data
+			submission_set = serializer.create(validated_data, owner = request.user,
+											   context = {'request' : request})
 			ret_subset = SubmissionSetSerializer(submission_set, context = {'request' : request})
 			return Response(ret_subset.data)
 		return Response(submission_set.error)
+	
+	def update(self, request, pk):
+		
+		submission_set = SubmissionSet.objects.get(id = pk)
+		serializer = SubmissionSetSerializer(data = request.data)
+		
+		if serializer.is_valid():
+			validated_data = serializer.validated_data
+			serializer.update(submission_set, validated_data)
+			
+			
+	
+	def partial_update(self, request, pk):
+		pass
+# 	@list_route(methods=['get'])
+# 	def units(self, request, pk=None):
+# 		submission = SubmissionSet.objects.get(pk=pk)
+		
+class CoverageViewSet(viewsets.ViewSet):
+	permission_classes = (permissions.AllowAny,)
+	
+	def cpl_details(self, request, *args, **kwargs):
+		submission_set = SubmissionSet.objects.get(pk = kwargs['submission_set'])
+		if submission_set.cpl_submission:
+			serializer = CPLSubmissionSerializer(submission_set.cpl_submission,
+												 context = {'request' : request})
+			return Response(serializer.data)
+		else:
+			submission_set.cpl_submission = CPLSubmission.objects.create(submission_set = submission_set)
+			serializer = CPLSubmissionSerializer(submission_set.cpl_submission,
+												 context = {'request' : request})
+			return Response(serializer.data)
+			
+	def pro_details(self, request, *args, **kwargs):
+		submission_set = SubmissionSet.objects.get(pk = kwargs['submission_set'])
+		if submission_set.professional_submission:
+			serializer = ProfessionalSubmissionSerializer(submission_set.professional_submission,
+														  context = {'request' : request})
+			return Response(serializer.data)
+		else:
+			raise rest_framework.serializers.ValidationError('This Submission Set does not have a Professional Coverage Portion')
+			
+class BaseRatingUnitViewSet(viewsets.ViewSet):
+	permission_classes = (permissions.AllowAny,)
+	
+	def setup(self, request, *args, **kwargs):
+		submission_type_dict = {
+			'cpl' : { 'attr' : 'cpl_submission', 'serializer' : CPLSubmissionSerializer},
+			'pro' : { 'attr' : 'professional_submission', 'serializer' : ProfessionalSubmissionSerializer}
+								}
+		
+		submission_type = kwargs['submission_type'].lower()
+		submission_set = SubmissionSet.objects.get(pk = kwargs['submission_set'])
+		settings_dict = submission_type_dict.pop(submission_type)		
+		submission = getattr(submission_set, settings_dict['attr'])		
+		serializer = settings_dict['serializer']
+		
+		return {
+			'submission_set' : submission_set,
+			'submission' : submission,
+			'serializer' : serializer,
+		}
+	
+	def list(self, request, *args, **kwargs):
+		
+		settings_dict = self.setup(request, *args, **kwargs)
+		#Unpack the dict in to local variables for the function
+		submission_set, submission, serializer = map(settings_dict.get, 
+													 ('submission_set', 'submission', 'serializer')
+													)
+		
+		if submission.base_rating_classes:
+			serializer = serializer(submission.base_rating_classes, many = True,
+														 context = {'request' : request})
+			return Response(serializer.data)
+		else:
+			raise rest_framework.serializers.ValidationError('This CPL Submission does not have any base rating units yet.')
+			
+	
 		
 class ContractorClassViewSet(viewsets.ReadOnlyModelViewSet):
 	"""
