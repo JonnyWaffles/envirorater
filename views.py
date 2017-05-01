@@ -7,30 +7,40 @@ from django.forms import inlineformset_factory, formset_factory
 from django.http import HttpResponseRedirect, JsonResponse
 from django.core import serializers
 from django.core.exceptions import ObjectDoesNotExist
+#from django.urls import reverse
 from decimal import Decimal
 from .forms import ContractorClassForm
 from .models import (CPLSubmissionBaseRate, ProfessionalSubmissionBaseRate, CPLSubmissionManualRate, ProfessionalSubmissionManualRate,
-                     CPLSubmission, ProfessionalSubmission, SubmissionSet, ContractorClass, ProfessionalClass, Submission)
+                     CPLSubmission, ProfessionalSubmission, SubmissionSet, ContractorClass, ProfessionalClass, Submission, ProfessionalRevenueBand,
+                     Deductible, PriorActs, Aggregate, State, Nose, ContractorsPollutionRevenueBand, Limit)
 from .serializers import (ContractorClassSerializer, ProfessionalClassSerializer, CPLSubmissionBaseRateSerializer,
 						  ProfessionalSubmissionBaseRateSerializer, CPLSubmissionManualRateSerializer, ProfessionalSubmissionManualRateSerializer,
-						  CPLSubmissionSerializer, ProfessionalSubmissionSerializer, SubmissionSetSerializer, UserSerializer)
+						  CPLSubmissionSerializer, ProfessionalSubmissionSerializer, SubmissionSetSerializer, UserSerializer,
+                          PremiumModifierAPISerializer, ProfessionalRevenueBandSerializer, ContractorsPollutionRevenueBandSerializer, DeductibleSerializer,
+                          PriorActsSerializer, AggregateSerializer, StateSerializer, NoseSerializer, LimitSerializer)
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator
 from django.contrib.auth import logout
 from django.contrib.auth.models import User
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.generics import (CreateAPIView, DestroyAPIView, GenericAPIView, ListAPIView, ListCreateAPIView,
+                                     RetrieveAPIView, RetrieveDestroyAPIView, RetrieveUpdateAPIView, RetrieveUpdateDestroyAPIView, 
+                                     UpdateAPIView)
+from rest_framework.mixins import CreateModelMixin, DestroyModelMixin, ListModelMixin, RetrieveModelMixin, UpdateModelMixin
 from rest_framework.renderers import JSONRenderer
 from rest_framework.parsers import JSONParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, ValidationError
 from rest_framework import authentication, permissions
 from rest_framework import status
 from rest_framework.reverse import reverse
 from rest_framework import viewsets
-import rest_framework.serializers
+from rest_framework.serializers import ListSerializer
+from rest_framework_bulk import BulkCreateModelMixin
 import importlib
+import collections
 		
 #Views go here.
 class Index(View):    
@@ -38,167 +48,223 @@ class Index(View):
         contractor_classes = ContractorClass.objects.all()    
         context = {"contractor_classes" : contractor_classes}    
         return render(request, 'envirorater/home.html', context)
-	
+    
 @api_view(['GET'])
+@permission_classes(((permissions.AllowAny, )))
 def api_root(request, format=None):
-    return Response({
-		'users' : reverse('user-list', request=request, format=format),
-        'submissions': reverse('submissionset-list', request=request, format=format),
-        'contractors': reverse('contractors-list', request=request, format=format),
-		'professionals': reverse('professionals-list', request=request, format=format)
-    })
+
+	response_dict = collections.OrderedDict()
+	response_dict.update([
+		('users', reverse('user-list', request=request, format=format)),
+        ('submissions', reverse('submissions-list', request=request, format=format)),
+        ('contractors', reverse('contractorclass-list', request=request, format=format)),
+		('professionals', reverse('professionalclass-list', request=request, format=format)),
+        ('factors', reverse('premium-modifier-api', request=request)),
+		('pro_revenue_bands', reverse('professionalrevenueband-list', request=request, format=format)),
+		('cpl_revenue_bands', reverse('contractorspollutionrevenueband-list', request=request, format=format)),
+		('deductibles', reverse('deductible-list', request=request, format=format)),
+		('prior_acts', reverse('prioracts-list', request=request, format=format)),
+		('aggregates', reverse('aggregate-list', request=request, format=format)),
+		('state', reverse('state-list', request=request, format=format)),
+		('nose', reverse('nose-list', request=request, format=format)),
+		('limit', reverse('limit-list', request=request, format=format))
+	])
+
+	return Response(response_dict)
+
+class BulkCreateMixin:
+    """
+    This Mixin checks the view's data and returns the ListSerializer
+    whenever an array is posted.
+    """
+    def get_serializer(self, *args, **kwargs):
+        if "data" in kwargs:
+            data = kwargs["data"]
+
+            if isinstance(data, list):
+                kwargs["many"] = True
+
+        return super().get_serializer(*args, **kwargs)
+
+class AdminOnlyViewMixin:
+
+    permission_classes = (permissions.IsAdminUser, )
+
 
 class UserViewSet(viewsets.ModelViewSet):
-	
+
 	queryset = User.objects.all()
 	serializer_class = UserSerializer
 	permission_classes = (permissions.AllowAny, )
-	
-class SubmissionViewSet(viewsets.ModelViewSet):
 
-	queryset = SubmissionSet.objects.all().order_by('-id')
-	serializer_class = SubmissionSetSerializer
-	permission_classes = (permissions.AllowAny, )
-	
-	def create(self, request):
+class SubmissionSetViewSet(BulkCreateMixin, viewsets.ModelViewSet):
 
-		raw = request.data.get('raw', False)		
-		serializer = SubmissionSetSerializer(data = request.data)
-		
-		if serializer.is_valid():
-			validated_data = serializer.validated_data
-			submission_set = serializer.create(validated_data, owner = request.user,
-											   context = {'request' : request})
-			ret_subset = SubmissionSetSerializer(submission_set, context = {'request' : request})
-			return Response(ret_subset.data)
-		return Response(submission_set.error)
-	
-	def update(self, request, pk):
-		
-		submission_set = SubmissionSet.objects.get(id = pk)
-		serializer = SubmissionSetSerializer(data = request.data)
-		
-		if serializer.is_valid():
-			validated_data = serializer.validated_data
-			serializer.update(submission_set, validated_data)
-			
-			
-	
-	def partial_update(self, request, pk):
-		pass
-# 	@list_route(methods=['get'])
-# 	def units(self, request, pk=None):
-# 		submission = SubmissionSet.objects.get(pk=pk)
-		
-class CoverageViewSet(viewsets.ViewSet):
+    queryset = SubmissionSet.objects.all().order_by('-id')
+    serializer_class = SubmissionSetSerializer
+    permission_classes = (permissions.AllowAny, )
+
+    def perform_create(self, serializer):
+        
+        if not isinstance(serializer, ListSerializer):
+            serializer.save(owner = self.request.user, raw = self.request.data.get('raw', False))
+        else:
+            serializer.save(owner = self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(owner = self.request.user, raw = self.request.data.get('raw', False))
+
+class CPLSubmissionViewSet(viewsets.ModelViewSet):
+    permission_classes = (permissions.AllowAny,)
+    queryset = CPLSubmission.objects.all()
+
+    serializer_class = CPLSubmissionSerializer
+
+    def get_object(self):
+        submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
+        return submission_set.cpl_submission
+
+
+    def perform_update(self, serializer):
+        serializer.save(raw = self.request.data.get('raw', False))
+
+class ProfessionalSubmissionViewSet(viewsets.ModelViewSet):
+    permission_classes = (permissions.AllowAny,)
+    queryset = ProfessionalSubmission.objects.all()
+
+    serializer_class = ProfessionalSubmissionSerializer
+     
+    def get_object(self):
+        submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
+        return submission_set.professional_submission
+
+    def perform_update(self, serializer):
+        serializer.save(raw = self.request.data.get('raw', False))
+        
+class CPLBaseRatingUnitViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+
+    permission_classes = (permissions.AllowAny,)
+
+    queryset = CPLSubmissionBaseRate.objects.all()
+    serializer_class = CPLSubmissionBaseRateSerializer
+    lookup_field = 'iso_code'
+
+    def get_queryset(self):
+        submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
+        return CPLSubmissionBaseRate.objects.filter(submission=submission_set.cpl_submission)
+
+    def perform_create(self, serializer):
+        submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
+        serializer.save(submission = submission_set.cpl_submission, raw = self.request.data.get('raw', False))
+
+    def perform_update(self, serializer):
+        serializer.save(raw = self.request.data.get('raw', False))
+
+class ProfessionalBaseRatingUnitViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+    """
+    retrieve:
+    Return the ProfessionalBaseRating Unit by iso_code.
+
+    update:
+    Update's the ProfessionalBaseRating Unit.
+
+    patch:
+    Partially update's the ProfessionalBaseRating Unit.
+
+    destroy:
+    Delete's the ProfessionalBaseRating Unit
+    """    
+    permission_classes = (permissions.AllowAny,)
+
+    queryset = ProfessionalSubmissionBaseRate.objects.all()
+    serializer_class = ProfessionalSubmissionBaseRateSerializer
+    lookup_field = 'iso_code'
+    
+    def get_queryset(self):
+        submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
+        return ProfessionalSubmissionBaseRate.objects.filter(submission=submission_set.professional_submission)
+
+    def perform_create(self, serializer):
+        submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
+        serializer.save(submission = submission_set.professional_submission, raw = self.request.data.get('raw', False))
+
+    def perform_update(self, serializer):
+        serializer.save(raw = self.request.data.get('raw', False))
+
+
+class ContractorClassViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+
 	permission_classes = (permissions.AllowAny,)
-	
-	def cpl_details(self, request, *args, **kwargs):
-		submission_set = SubmissionSet.objects.get(pk = kwargs['submission_set'])
-		if submission_set.cpl_submission:
-			serializer = CPLSubmissionSerializer(submission_set.cpl_submission,
-												 context = {'request' : request})
-			return Response(serializer.data)
-		else:
-			submission_set.cpl_submission = CPLSubmission.objects.create(submission_set = submission_set)
-			serializer = CPLSubmissionSerializer(submission_set.cpl_submission,
-												 context = {'request' : request})
-			return Response(serializer.data)
-			
-	def pro_details(self, request, *args, **kwargs):
-		submission_set = SubmissionSet.objects.get(pk = kwargs['submission_set'])
-		if submission_set.professional_submission:
-			serializer = ProfessionalSubmissionSerializer(submission_set.professional_submission,
-														  context = {'request' : request})
-			return Response(serializer.data)
-		else:
-			raise rest_framework.serializers.ValidationError('This Submission Set does not have a Professional Coverage Portion')
-			
-class BaseRatingUnitViewSet(viewsets.ViewSet):
-	permission_classes = (permissions.AllowAny,)
-	
-	def setup(self, request, *args, **kwargs):
-		submission_type_dict = {
-			'cpl' : { 'attr' : 'cpl_submission', 'serializer' : CPLSubmissionSerializer},
-			'pro' : { 'attr' : 'professional_submission', 'serializer' : ProfessionalSubmissionSerializer}
-								}
-		
-		submission_type = kwargs['submission_type'].lower()
-		submission_set = SubmissionSet.objects.get(pk = kwargs['submission_set'])
-		settings_dict = submission_type_dict.pop(submission_type)		
-		submission = getattr(submission_set, settings_dict['attr'])		
-		serializer = settings_dict['serializer']
-		
-		return {
-			'submission_set' : submission_set,
-			'submission' : submission,
-			'serializer' : serializer,
-		}
-	
-	def list(self, request, *args, **kwargs):
-		
-		settings_dict = self.setup(request, *args, **kwargs)
-		#Unpack the dict in to local variables for the function
-		submission_set, submission, serializer = map(settings_dict.get, 
-													 ('submission_set', 'submission', 'serializer')
-													)
-		
-		if submission.base_rating_classes:
-			serializer = serializer(submission.base_rating_classes, many = True,
-														 context = {'request' : request})
-			return Response(serializer.data)
-		else:
-			raise rest_framework.serializers.ValidationError('This CPL Submission does not have any base rating units yet.')
-			
-	
-		
-class ContractorClassViewSet(viewsets.ReadOnlyModelViewSet):
-	"""
-	This viewset automatically provides 'list' and 'detail' actions.
-	"""
+
 	queryset = ContractorClass.objects.all()
 	serializer_class = ContractorClassSerializer
 	lookup_field = 'iso_code'
-	
-		
-class ProfessionalClassViewSet(viewsets.ReadOnlyModelViewSet):
-		
-	queryset = ProfessionalClass.objects.all()
-	serializer_class = ProfessionalClassSerializer
-	lookup_field = 'iso_code'
+    
+class ProfessionalClassViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+
+    permission_classes = (permissions.AllowAny,)
+
+    queryset = ProfessionalClass.objects.all()
+    serializer_class = ProfessionalClassSerializer
+    lookup_field = 'iso_code'
+
+class ProfessionalRevenueBandViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+
+    queryset = ProfessionalRevenueBand.objects.all()
+    serializer_class = ProfessionalRevenueBandSerializer
+
+class ContractorsPollutionRevenueBandViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+
+    queryset = ContractorsPollutionRevenueBand.objects.all()
+    serializer_class = ContractorsPollutionRevenueBandSerializer
+
+class DeductibleViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+
+    queryset = Deductible.objects.all()
+    serializer_class = DeductibleSerializer
+
+class LimitViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+
+    queryset = Limit.objects.all()
+    serializer_class = LimitSerializer
+
+class PriorActsViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+
+    queryset = PriorActs.objects.all()
+    serializer_class = PriorActsSerializer
+
+class AggregateViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+
+    queryset = Aggregate.objects.all()
+    serializer_class = AggregateSerializer
+
+class StateViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+
+    queryset = State.objects.all()
+    serializer_class = StateSerializer
+
+class NoseViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+
+    queryset = Nose.objects.all()
+    serializer_class = NoseSerializer
 
 class PremiumModifierAPI(APIView):
-	#I want a GET request with no arguments to return an options request
-  	#detailing how to use the API
-  	#Not sure how to do that yet so need to come back to this.
-	permission_classes = (permissions.AllowAny,)
-	
-	from rest_framework.exceptions import ValidationError
-	
-	def get(self, request, *args, **kwargs):
-		if request.query_params:
-			query = PremiumModifierAPISerializer(request.query_params)
-			premium = query.data['premium']
-			factor_dict = {}
-      #Once again limits are a special case.  We need the user to input them
-      #'limit1/limit2';
-			if query.data['modifier'] == 'limit':
-				try:
-					data_string = query.data['mod_value']
-					limit1 = data_string.split('/')[0]
-					limit2 = data_string.split('/')[1]
-				except:
-					raise rest_framework.serializers.ValidationError('Limits must be separated by a slash. Ex. 10000/5000')
-				try:
-					limit = Limit.objects.get(limit1__iexact = limit1, limit2__iexact = limit2)
-					factor_dict = {'limit1' : limit2, 'limit2' : limit2}
-				except ObjectDoesNotExist:
-					raise rest_framework.serializers.ValidationError('That limit object could not be found')					
-			else:
-				factor_dict = {query.data['modifier'] : query.data['mod_value']}
-			premium = SubmissionManualRate.mod_premium(premium, factor_dict)
-			query._data['premium'] = premium
-			return Response(query.data)
-		else:
-      #Note there has to be a better way to show an example
-			raise rest_framework.serializers.ValidationError('Please make factor GET requests with premium, modifier, and mod_value arguments.')
+    """
+    get:
+    Returns an empty PremiumModifierAPISerializer as an example.
+
+    post:
+    Takes a premium and one or more modifiers, returns the modified premium.
+    Acceptable modifier values are 'limit', 'deductible', 'primary_nose_coverage',
+    'mold_nose_coverage','aggregate_deductible_multiplier', or 'prior_acts_years'.
+    """    
+    permission_classes = (permissions.AllowAny,)
+    
+    def get(self, request, *args, **kwargs):
+        print(reverse('premium-modifier-api', request=request))
+        return Response(PremiumModifierAPISerializer().data)
+
+    def post(self, request, *args, **kwargs):
+        serializer = PremiumModifierAPISerializer(data = request.data)
+        serializer.is_valid(raise_exception=True)
+        premium = serializer.mod_premium()
+        return Response(premium)

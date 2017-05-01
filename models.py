@@ -35,7 +35,6 @@ class ContractorClass(BaseRatingUnit, FactorLookUpTable):
     
     def get_premium_ex_mold(self, revenue = 0):
         
-        print("ContractorClass get_premium_ex_mold self: {0}".format(self))
         revenue_band = ContractorsPollutionRevenueBand.objects.get(start__lt = revenue, end__gte = revenue)
         marginal_premium = (revenue - revenue_band.start) * revenue_band.factor / 1000
         class_premium_ex_mold = (revenue_band.cumulative_premium + marginal_premium) * self.factor
@@ -159,9 +158,17 @@ class SubmissionBaseRate(models.Model):
     
     def get_revenue_band_factor(self):
         return self.get_revenue_band_object().factor
-        
+
+    def update_all_premiums(self):
+        raise NotImplementedError
+
+    def __str__(self):
+        return ("iso_code: %s submission: %s premium: %s" %
+                (self.iso_code, self.submission, self.premium))
+
     class Meta:
         abstract = True
+        unique_together = ('submission', 'iso_code',)
         
 
 class SubmissionManualRate(models.Model):
@@ -192,21 +199,23 @@ class SubmissionManualRate(models.Model):
     def get_factor_values(factor_dictionary):
 
         factor_value_dict = {}
-        for factor in factor_dictionary.keys():
+
+        #Limit factor is a special case because it needs two values from the
+        #calling object
+        if 'limit1' in factor_dictionary.keys() and 'limit2' in factor_dictionary.keys():
+            limit = Limit.objects.get(limit1__iexact = factor_dictionary['limit1'],
+                                        limit2__iexact = factor_dictionary['limit2'])
+            factor_value_dict.update( {'limit_factor' : limit.factor} )
+            #Remove the limits once we're done with them from the list so 
+            #they do not trigger twice.
+            factor_dictionary.pop('limit1')
+            factor_dictionary.pop('limit2')
+
+        for factor in factor_dictionary:
             #Check to make sure the factor requested is an allowed factor type.            
-            if factor in SubmissionManualRate.factor_types.keys:
-                #Limit factor is a special case because it needs two values from the
-                #calling object
-                if 'limit1' in factor_list and 'limit2' in factor_list:
-                    limit = Limit.objects.get(limit1__iexact = factor_value_dict['limit1'],
-                                              limit2__iexact = factor_value_dict['limit2'])
-                    factor_value_dict.update( {'limit_factor' : limit.factor} )
-                    #Remove the limits once we're done with them from the list so 
-                    #they do not trigger twice.
-                    factor_list.pop('limit1')
-                    factor_list.pop('limit2')
+            if factor in SubmissionManualRate.factor_types.keys():
                 
-                query = {'{0}__iexact'.format(factor) : factor_value_dict[factor]}
+                query = {'{0}__iexact'.format(factor) : factor_dictionary[factor]}
                 factor_lookup_table = SubmissionManualRate.factor_types[factor].objects.get(**query)
                 factor_value_dict.update( {'{0}_factor'.format(factor) : factor_lookup_table.factor} )
         return factor_value_dict
@@ -214,18 +223,19 @@ class SubmissionManualRate(models.Model):
     #This helper function returns a dictionary of a ManualRate instance's factor attributes and their values
     #So we can look up the values with get_factor_values()
     def get_factor_attributes(self):
+        repr(self)
         factor_dictionary = {}
         #We only want factor attributes
         factor_list = dir(self)
-        for f in factor_list:
-            if f in SubmissionManualRate.factor_types:
-                factor_list.update( {f : getattr(self, f)} )
+        for attr in factor_list:
+            if attr in SubmissionManualRate.factor_types.keys():
+                factor_dictionary.update({attr : getattr(self, attr)})
         return factor_dictionary
 
     #This function sets the instances factor_type attributes using its factor values
     def set_factor_values(self):
-        factor_dict = get_factor_attributes(self)
-        factor_value_dict = get_factor_values(factor_dict)
+        factor_dict = self.get_factor_attributes()
+        factor_value_dict = self.get_factor_values(factor_dict)
         for k, v in factor_value_dict.items():
             setattr(self, k, v)      
     
@@ -238,15 +248,18 @@ class SubmissionManualRate(models.Model):
         if manual_rate and factor_dictionary:
             raise ValueError("Both a manual_rate instance and a factor_dictionary provided. Use one, not both.")
 
-        assert isinstance(manual_rate, SubmissionManualRate), "manual_rate must be a ManualRate instance."
-
         if manual_rate:
-            factor_dictionary = manual_rate.get_factor_attributes(manual_rate)
+            assert isinstance(manual_rate, SubmissionManualRate), "manual_rate must be a ManualRate instance."
+            factor_dictionary = manual_rate.get_factor_attributes()
 
-        factor_value_dict = manual_rate.get_factor_values(factor_dictionary)
-        for factor in factor_dictionary.values():
+        factor_value_dict = SubmissionManualRate.get_factor_values(factor_dictionary)
+        for factor in factor_value_dict.values():
             premium *= factor
-        return premium   
+        return premium
+    
+    def __str__(self):
+        return ("%s submission: %s total_premium: %s" % 
+                (self.__class__.__name__, self.submission, self.total_premium))
    
     class Meta:
         abstract = True
@@ -289,6 +302,11 @@ class CPLSubmissionBaseRate(SubmissionBaseRate):
         self.iso_description = self.get_iso_description()
         self.iso_factor = self.get_iso_factor()
         self.revenue_band_factor = self.get_revenue_band_factor()
+
+    def get_absolute_url(self, request = None):
+        set_id = self.submission.submission_set.id
+        return reverse('cpl-units-detail', kwargs={'submission_set' : set_id, 'iso_code' : self.iso_code},
+                       request = request)
     
 class ProfessionalSubmissionBaseRate(SubmissionBaseRate):
 
@@ -302,6 +320,11 @@ class ProfessionalSubmissionBaseRate(SubmissionBaseRate):
         self.iso_factor = self.get_iso_factor()
         self.revenue_band_factor = self.get_revenue_band_factor()
         self.premium = self.get_base_rate_object().get_premium(self.revenue)
+
+    def get_absolute_url(self, request = None):
+        set_id = self.submission.submission_set.id
+        return reverse('pro-units-detail', kwargs={'submission_set' : set_id, 'iso_code' : self.iso_code},
+                       request = request)
     
 class CPLSubmissionManualRate(SubmissionManualRate):
 
@@ -309,7 +332,7 @@ class CPLSubmissionManualRate(SubmissionManualRate):
     primary_nose_coverage_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1, blank = True)
     mold_nose_coverage = models.PositiveIntegerField(default = 0, blank = True)
     mold_nose_coverage_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1, blank = True)
-    submission = models.ForeignKey('CPLSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')
+    submission = models.OneToOneField('CPLSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')
     
 class ProfessionalSubmissionManualRate(SubmissionManualRate):
 
@@ -319,10 +342,13 @@ class ProfessionalSubmissionManualRate(SubmissionManualRate):
     state_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1.000, blank = True)
     prior_acts_years = models.CharField(max_length = 10, default = 'Full', blank = True)
     prior_acts_years_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1.000, blank = True)
-    submission = models.ForeignKey('ProfessionalSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')
+    submission = models.OneToOneField('ProfessionalSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')
 
 #Abstract class just to type the specific submissions as submissions
 class Submission(models.Model):
+
+    def __str__(self):
+        return ("%s id: %s" % (self.__class__.__name__, self.id))
 
     class Meta:
         abstract = True
@@ -334,19 +360,31 @@ class CPLSubmission(Submission):
         total_premium_ex_mold = 0
         total_mold_premium = 0
         
-        for base_rating_unit in self.base_rating_classes:
+        for base_rating_unit in self.base_rating_classes.all():
             total_premium_ex_mold += base_rating_unit.premium_ex_mold
             total_mold_premium += base_rating_unit.mold_premium
-            total_premium = self.total_premium_ex_mold + self.total_mold_premium
+            total_premium = total_premium_ex_mold + total_mold_premium
 
-        return {'total_premium_ex_mold' : total_premium_ex_mold,
-                'total_mold_premium' : total_mold_premium,
-                'total_premium' : total_premium}
+        totals_dict = {
+            'total_premium_ex_mold' : total_premium_ex_mold,
+            'total_mold_premium' : total_mold_premium,
+            'total_premium' : total_premium
+            }
+
+        return totals_dict
+
+    def get_manual_rate_total(self):
+        totals_dict = self.get_base_unit_totals()
+        for premium_type in totals_dict:
+            manual_rate = self.manual_rate
+            original_premium = totals_dict[premium_type]
+            new_premium = SubmissionManualRate.mod_premium(original_premium, manual_rate)
+            setattr(manual_rate, premium_type, new_premium)
+            manual_rate.save()
     
     def get_absolute_url(self, request = None):
         set_id = self.submission_set.id
         return reverse('cpl-details', kwargs={'submission_set' : set_id}, request = request)
-
 
 class ProfessionalSubmission(Submission):
 
@@ -354,10 +392,18 @@ class ProfessionalSubmission(Submission):
 
         total_premium = 0
 
-        for base_rating_unit in self.base_rating_classes:
+        for base_rating_unit in self.base_rating_classes.all():
             total_premium += base_rating_unit.premium
+
+        return total_premium
+
+    def get_manual_rate_total(self):
+        manual_rate = self.manual_rate
+        total_premium = SubmissionManualRate.mod_premium(self.get_base_unit_totals(), manual_rate)
+        setattr(manual_rate, 'total_premium', total_premium)
+        manual_rate.save()
             
-    def get_absolute_url(self, request):
+    def get_absolute_url(self, request = None):
         set_id = self.submission_set.id
         return reverse('pro-details', kwargs={'submission_set' : set_id}, request = request)
         
@@ -376,3 +422,7 @@ class SubmissionSet(models.Model):
     )
     last_saved = models.DateField(auto_now = True)
     created_on = models.DateField(auto_now_add = True)
+
+    def __str__(self):
+        return ("insured_name: %s id: %s created_on: %s" %
+                (self.insured_name, self.id, self.created_on))
