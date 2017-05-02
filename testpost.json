@@ -24,13 +24,13 @@
 	},
 	"professional_submission": {
 		"base_rating_classes": [{
-				"iso_code": 111111,
+				"iso_code": 11111,
 				"revenue": 800000
 			}, {
-				"iso_code": 222222,
+				"iso_code": 22222,
 				"revenue": 700000
 			}, {
-				"iso_code": 333333,
+				"iso_code": 33333,
 				"revenue": 600000
 			}
 		],

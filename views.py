@@ -17,7 +17,7 @@ from .serializers import (ContractorClassSerializer, ProfessionalClassSerializer
 						  ProfessionalSubmissionBaseRateSerializer, CPLSubmissionManualRateSerializer, ProfessionalSubmissionManualRateSerializer,
 						  CPLSubmissionSerializer, ProfessionalSubmissionSerializer, SubmissionSetSerializer, UserSerializer,
                           PremiumModifierAPISerializer, ProfessionalRevenueBandSerializer, ContractorsPollutionRevenueBandSerializer, DeductibleSerializer,
-                          PriorActsSerializer, AggregateSerializer, StateSerializer, NoseSerializer, LimitSerializer)
+                          PriorActsSerializer, AggregateSerializer, StateSerializer, NoseSerializer, LimitSerializer, CPLSubmissionManualRateSerializer)
 import json
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.utils.decorators import method_decorator
@@ -41,14 +41,8 @@ from rest_framework.serializers import ListSerializer
 from rest_framework_bulk import BulkCreateModelMixin
 import importlib
 import collections
-		
-#Views go here.
-class Index(View):    
-    def get(self, request, *args, **manual_rate_data):
-        contractor_classes = ContractorClass.objects.all()    
-        context = {"contractor_classes" : contractor_classes}    
-        return render(request, 'envirorater/home.html', context)
-    
+
+
 @api_view(['GET'])
 @permission_classes(((permissions.AllowAny, )))
 def api_root(request, format=None):
@@ -72,20 +66,6 @@ def api_root(request, format=None):
 
 	return Response(response_dict)
 
-class BulkCreateMixin:
-    """
-    This Mixin checks the view's data and returns the ListSerializer
-    whenever an array is posted.
-    """
-    def get_serializer(self, *args, **kwargs):
-        if "data" in kwargs:
-            data = kwargs["data"]
-
-            if isinstance(data, list):
-                kwargs["many"] = True
-
-        return super().get_serializer(*args, **kwargs)
-
 class AdminOnlyViewMixin:
 
     permission_classes = (permissions.IsAdminUser, )
@@ -96,102 +76,276 @@ class UserViewSet(viewsets.ModelViewSet):
 	queryset = User.objects.all()
 	serializer_class = UserSerializer
 	permission_classes = (permissions.AllowAny, )
+	
+class SubmissionSetViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	This is the primary entry point to the API. Submissions and all nested objects are created or updated here.
 
-class SubmissionSetViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+	create:
+	Creates a new SubmissionSet containing either or both a cpl_submission and/or professional_submission.
 
-    queryset = SubmissionSet.objects.all().order_by('-id')
-    serializer_class = SubmissionSetSerializer
-    permission_classes = (permissions.AllowAny, )
+	retrieve:
+	Views a SubmissionSet based on ID. Example /envirorater/api/submissions/1 will retrieve the SubmissionSet 1 object.
 
-    def perform_create(self, serializer):
-        
-        if not isinstance(serializer, ListSerializer):
-            serializer.save(owner = self.request.user, raw = self.request.data.get('raw', False))
-        else:
-            serializer.save(owner = self.request.user)
+	update:
+	Updates a retrieved instance.
 
-    def perform_update(self, serializer):
-        serializer.save(owner = self.request.user, raw = self.request.data.get('raw', False))
+	destroy:
+	Deletes a specified SubmissionSet by id.
+
+	list:
+	List all the SubmissionSets.
+	"""	
+
+	queryset = SubmissionSet.objects.all().order_by('-id')
+	serializer_class = SubmissionSetSerializer
+	permission_classes = (permissions.AllowAny, )
+
+	def perform_create(self, serializer):
+		
+		user = self.request.user
+		if user.is_anonymous:
+			user = None
+			
+		raw = self.request.data.get('raw', False)
+		
+		
+		if not isinstance(serializer, ListSerializer):
+			serializer.save(owner = user, raw = raw)
+		else:
+			serializer.save(owner = user)
+
+	def perform_update(self, serializer):
+		serializer.save(owner = user, raw = raw)
 
 class CPLSubmissionViewSet(viewsets.ModelViewSet):
-    permission_classes = (permissions.AllowAny,)
-    queryset = CPLSubmission.objects.all()
+	"""
+	retrieve:
+	Views this SubmissionSet's cpl_submission attribute based on SubmissionSet ID. Example /envirorater/api/submissions/1/cpl 
+	retrieves SubmissionSet 1's CPLSubmission object.
 
-    serializer_class = CPLSubmissionSerializer
+	update:
+	Updates a CPLSubmission instance.
 
-    def get_object(self):
-        submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
-        return submission_set.cpl_submission
+	destroy:
+	Deletes a specified SubmissionSet's CPLSubmission by SubmissionSet id.
+	"""
+
+	permission_classes = (permissions.AllowAny,)
+	queryset = CPLSubmission.objects.all()
+
+	serializer_class = CPLSubmissionSerializer
+
+	def get_object(self):
+		submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
+		return submission_set.cpl_submission
 
 
-    def perform_update(self, serializer):
-        serializer.save(raw = self.request.data.get('raw', False))
+	def perform_update(self, serializer):
+		serializer.save(raw = self.request.data.get('raw', False))
 
 class ProfessionalSubmissionViewSet(viewsets.ModelViewSet):
-    permission_classes = (permissions.AllowAny,)
-    queryset = ProfessionalSubmission.objects.all()
+	"""	
+	retrieve:
+	Views this SubmissionSet's professional_submission attribute based on SubmissionSet ID. Example /envirorater/api/submissions/1/pro 
+	retrieves SubmissionSet 1's ProfessionalSubmission object.
 
-    serializer_class = ProfessionalSubmissionSerializer
-     
-    def get_object(self):
-        submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
-        return submission_set.professional_submission
+	update:
+	Updates a specific ProfessionalSubmission instance.
 
-    def perform_update(self, serializer):
-        serializer.save(raw = self.request.data.get('raw', False))
-        
-class CPLBaseRatingUnitViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+	destroy:
+	Deletes a specified SubmissionSet's ProfessionalSubmission by SubmissionSet id.
+	"""
 
-    permission_classes = (permissions.AllowAny,)
+	permission_classes = (permissions.AllowAny,)
+	queryset = ProfessionalSubmission.objects.all()
 
-    queryset = CPLSubmissionBaseRate.objects.all()
-    serializer_class = CPLSubmissionBaseRateSerializer
-    lookup_field = 'iso_code'
+	serializer_class = ProfessionalSubmissionSerializer
 
-    def get_queryset(self):
-        submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
-        return CPLSubmissionBaseRate.objects.filter(submission=submission_set.cpl_submission)
+	def get_object(self):
+		submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
+		return submission_set.professional_submission
 
-    def perform_create(self, serializer):
-        submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
-        serializer.save(submission = submission_set.cpl_submission, raw = self.request.data.get('raw', False))
+	def perform_update(self, serializer):
+		serializer.save(raw = self.request.data.get('raw', False))
+		 
+class CPLBaseRatingUnitViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	create:
+	Creates a new CPLBaseRatingUnit on the specified SubmissionSet's CPLSubmission object.
 
-    def perform_update(self, serializer):
-        serializer.save(raw = self.request.data.get('raw', False))
+	retrieve:
+	View the specific base_rating_unit by iso_code. Example, /envirorater/api/submissions/1/cpl/units/94444
+	would view the details of the submission's Aircraft refueling base rating unit if it existed. Each submission's
+	base_rating_units must have a unique iso_code.
 
-class ProfessionalBaseRatingUnitViewSet(BulkCreateMixin, viewsets.ModelViewSet):
-    """
-    retrieve:
-    Return the ProfessionalBaseRating Unit by iso_code.
+	update:
+	Updates a specific CPLBaseRatingUnit.
 
-    update:
-    Update's the ProfessionalBaseRating Unit.
+	destroy:
+	Deletes a specific CPLBaseRatingUnit from the CPLSubmission object.
+	"""       
 
-    patch:
-    Partially update's the ProfessionalBaseRating Unit.
+	permission_classes = (permissions.AllowAny,)
 
-    destroy:
-    Delete's the ProfessionalBaseRating Unit
-    """    
-    permission_classes = (permissions.AllowAny,)
+	queryset = CPLSubmissionBaseRate.objects.all()
+	serializer_class = CPLSubmissionBaseRateSerializer
+	lookup_field = 'iso_code'
 
-    queryset = ProfessionalSubmissionBaseRate.objects.all()
-    serializer_class = ProfessionalSubmissionBaseRateSerializer
-    lookup_field = 'iso_code'
-    
-    def get_queryset(self):
-        submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
-        return ProfessionalSubmissionBaseRate.objects.filter(submission=submission_set.professional_submission)
+	def get_queryset(self):
+		submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
+		return CPLSubmissionBaseRate.objects.filter(submission=submission_set.cpl_submission)
 
-    def perform_create(self, serializer):
-        submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
-        serializer.save(submission = submission_set.professional_submission, raw = self.request.data.get('raw', False))
+	def perform_create(self, serializer):
+		submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
+		serializer.save(submission = submission_set.cpl_submission, raw = self.request.data.get('raw', False))
 
-    def perform_update(self, serializer):
-        serializer.save(raw = self.request.data.get('raw', False))
+	def perform_update(self, serializer):
+		serializer.save(raw = self.request.data.get('raw', False))
 
+class ProfessionalBaseRatingUnitViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Return the ProfessionalBaseRating Unit by iso_code.
 
+	update:
+	Update's the ProfessionalBaseRating Unit.
+
+	patch:
+	Partially update's the ProfessionalBaseRating Unit.
+
+	destroy:
+	Delete's the ProfessionalBaseRating Unit.
+
+	list:
+	Returns a list of all the ProfessionalSubmission's base_rating_units.
+	"""    
+	permission_classes = (permissions.AllowAny,)
+
+	queryset = ProfessionalSubmissionBaseRate.objects.all()
+	serializer_class = ProfessionalSubmissionBaseRateSerializer
+	lookup_field = 'iso_code'
+
+	def get_queryset(self):
+		submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
+		return ProfessionalSubmissionBaseRate.objects.filter(submission=submission_set.professional_submission)
+
+	def perform_create(self, serializer):
+		submission_set = SubmissionSet.objects.get(pk = self.kwargs['submission_set'])
+		serializer.save(submission = submission_set.professional_submission, raw = self.request.data.get('raw', False))
+
+	def perform_update(self, serializer):
+		serializer.save(raw = self.request.data.get('raw', False))
+
+class CPLSubmissionManualRateViewSet(viewsets.ModelViewSet):
+	"""
+	create:
+	Creates the CPLSubmission's manual_rate attribute CPLManualRate object.
+	
+	retrieve:
+	Return the CPLSubmission's manual_rate attribute's CPLManualRate object.
+	
+	update:
+	Update's the CPLSubmission's manual_rate attribute's CPLManualRate object.
+	
+	patch:
+	Partially update's the CPLSubmission's manual_rate attribute's CPLManualRate object. 
+	
+	destroy:
+	Delete's the CPLSubmission's manual_rate attribute's CPLManualRate object.
+	"""
+	
+	permission_classes = (permissions.AllowAny, )
+	
+	queryset = CPLSubmissionManualRate.objects.all()
+	serializer_class = CPLSubmissionManualRateSerializer
+	lookup_field = None
+	
+	def get_submission(self):
+		submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
+		
+		assert hasattr(submission_set, 'cpl_submission'), (
+			'SubmissionSet %s has no cpl_submission attribute. A CPLSubmission must exist before a'
+			'CPLManualRate instance.' % (submission_set.id)
+		)
+		
+		return submission_set.cpl_submission
+	
+	def get_queryset(self):
+		cpl_submission = self.get_submission()
+		return CPLSubmissionManualRate.objects.filter(submission = cpl_submission)
+	
+	def get_object(self):
+		cpl_submission = self.get_submission()
+		return CPLSubmissionManualRate.objects.get(submission = cpl_submission)
+	
+	def perform_create(self, serializer):
+		cpl_submission = self.get_submission()
+		serializer.save(submisson = cpl_submission)
+		
+class ProfessionalSubmissionManualRateViewSet(viewsets.ModelViewSet):
+	"""
+	create:
+	Creates the ProfessionalSubmission's manual_rate attribute ProfessionalManualRate object.
+	
+	retrieve:
+	Return the ProfessionalSubmission's manual_rate attribute's ProfessionalManualRate object.
+	
+	update:
+	Update's the ProfessionalSubmission's manual_rate attribute's ProfessionalManualRate object.
+	
+	patch:
+	Partially update's the ProfessionalSubmission's manual_rate attribute's ProfessionalManualRate object. 
+	
+	destroy:
+	Delete's the ProfesisonalSubmission's manual_rate attribute's ProfessionalManualRate object.
+	"""
+	
+	permission_classes = (permissions.AllowAny, )
+	
+	queryset = ProfessionalSubmissionManualRate.objects.all()
+	serializer_class = ProfessionalSubmissionManualRateSerializer
+	lookup_field = None
+	
+	def get_submission(self):
+		submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
+		
+		assert hasattr(submission_set, 'professional_submission'), (
+			'SubmissionSet %s has no professional_submission attribute. A ProfessionalSubmission must exist before a'
+			'ProfessionalManualRate instance.' % (submission_set.id)
+		)
+		
+		return submission_set.professional_submission
+	
+	def get_queryset(self):
+		professional_submission = self.get_submission()
+		return ProfessionalSubmissionManualRate.objects.filter(submission = professional_submission)
+	
+	def get_object(self):
+		professional_submission = self.get_submission()
+		return ProfessionalSubmissionManualRate.objects.get(submission = professional_submission)
+	
+	def perform_create(self, serializer):
+		professional_submission = self.get_submission()
+		serializer.save(submisson = professional_submission)	
+		
 class ContractorClassViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Returns the specified ContractorClass by iso_code.
+
+	update:
+	Update's the ContractorClass *Admin Only in Production*.
+
+	patch:
+	Partially update's the ContractorClass *Admin Only in Production*.
+
+	destroy:
+	Delete's the ContractorClass *Admin Only in Production*.
+
+	list:
+	Returns a list of all ContractorClasses.
+	"""
 
 	permission_classes = (permissions.AllowAny,)
 
@@ -199,53 +353,125 @@ class ContractorClassViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
 	serializer_class = ContractorClassSerializer
 	lookup_field = 'iso_code'
     
-class ProfessionalClassViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+class ProfessionalClassViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Returns the specified ProfessionalClass by iso_code. Only superusers can see factors.
 
-    permission_classes = (permissions.AllowAny,)
+	update:
+	Update's the ProfessionalClass *Admin Only in Production*.
 
-    queryset = ProfessionalClass.objects.all()
-    serializer_class = ProfessionalClassSerializer
-    lookup_field = 'iso_code'
+	patch:
+	Partially update's the ProfessionalClass *Admin Only in Production*.
 
-class ProfessionalRevenueBandViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+	destroy:
+	Delete's the ProfessionalClass *Admin Only in Production*.
 
-    queryset = ProfessionalRevenueBand.objects.all()
-    serializer_class = ProfessionalRevenueBandSerializer
+	list:
+	Returns a list of all ProfessionalClasses.
+	"""
 
-class ContractorsPollutionRevenueBandViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+	permission_classes = (permissions.AllowAny,)
 
-    queryset = ContractorsPollutionRevenueBand.objects.all()
-    serializer_class = ContractorsPollutionRevenueBandSerializer
+	queryset = ProfessionalClass.objects.all()
+	serializer_class = ProfessionalClassSerializer
+	lookup_field = 'iso_code'
 
-class DeductibleViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+class ProfessionalRevenueBandViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Returns the specified ProfessionalRevenueBand by id. Only superusers can see factors.
 
-    queryset = Deductible.objects.all()
-    serializer_class = DeductibleSerializer
+	list:
+	Returns a list of all ProfessionalRevenueBands. Only superusers can see factors.
+	"""
 
-class LimitViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+	queryset = ProfessionalRevenueBand.objects.all()
+	serializer_class = ProfessionalRevenueBandSerializer
 
-    queryset = Limit.objects.all()
-    serializer_class = LimitSerializer
+class ContractorsPollutionRevenueBandViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Returns the specified ContractorsPollutionRevenueBand by id. Only superusers can see factors.
 
-class PriorActsViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+	list:
+	Returns a list of all ContractorsPollutionRevenueBands. Only superusers can see factors.
+	"""
 
-    queryset = PriorActs.objects.all()
-    serializer_class = PriorActsSerializer
+	queryset = ContractorsPollutionRevenueBand.objects.all()
+	serializer_class = ContractorsPollutionRevenueBandSerializer
 
-class AggregateViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+class DeductibleViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Returns the specified Deductible by id. Only superusers can see factors.
 
-    queryset = Aggregate.objects.all()
-    serializer_class = AggregateSerializer
+	list:
+	Returns a list of all Deductible. Only superusers can see factors.
+	"""
 
-class StateViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+	queryset = Deductible.objects.all()
+	serializer_class = DeductibleSerializer
 
-    queryset = State.objects.all()
-    serializer_class = StateSerializer
+class LimitViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Returns the specified Limit by id. Only superusers can see factors.
 
-class NoseViewSet(BulkCreateMixin, viewsets.ModelViewSet):
+	list:
+	Returns a list of all Limits. Only superusers can see factors.
+	"""
+	
+	queryset = Limit.objects.all()
+	serializer_class = LimitSerializer
 
-    queryset = Nose.objects.all()
-    serializer_class = NoseSerializer
+class PriorActsViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Returns the specified PriorActs by id. Only superusers can see factors.
+
+	list:
+	Returns a list of all PriorActs. Only superusers can see factors.
+	"""
+
+	queryset = PriorActs.objects.all()
+	serializer_class = PriorActsSerializer
+
+class AggregateViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Returns the specified Aggregate by id. Only superusers can see factors.
+
+	list:
+	Returns a list of all Aggregates. Only superusers can see factors.
+	"""
+
+	queryset = Aggregate.objects.all()
+	serializer_class = AggregateSerializer
+
+class StateViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Returns the specified State by id. Only superusers can see factors.
+
+	list:
+	Returns a list of all States. Only superusers can see factors.
+	"""
+
+	queryset = State.objects.all()
+	serializer_class = StateSerializer
+
+class NoseViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
+	"""
+	retrieve:
+	Returns the specified Nose by id. Only superusers can see factors.
+
+	list:
+	Returns a list of all Noses. Only superusers can see factors.
+	"""
+
+	queryset = Nose.objects.all()
+	serializer_class = NoseSerializer
 
 class PremiumModifierAPI(APIView):
     """

@@ -334,6 +334,11 @@ class CPLSubmissionManualRate(SubmissionManualRate):
     mold_nose_coverage_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1, blank = True)
     submission = models.OneToOneField('CPLSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')
     
+    def get_absolute_url(self, request = None):
+        set_id = self.submission.submission_set.id
+        return reverse('cpl-manual-rate-detail', kwargs={'submission_set' : set_id},
+                       request = request)
+    
 class ProfessionalSubmissionManualRate(SubmissionManualRate):
 
     aggregate_deductible_multiplier = models.PositiveIntegerField(default = 1, blank = True)
@@ -343,6 +348,11 @@ class ProfessionalSubmissionManualRate(SubmissionManualRate):
     prior_acts_years = models.CharField(max_length = 10, default = 'Full', blank = True)
     prior_acts_years_factor = models.DecimalField(max_digits = 4, decimal_places = 3, default = 1.000, blank = True)
     submission = models.OneToOneField('ProfessionalSubmission', on_delete = models.CASCADE, related_name = 'manual_rate')
+    
+    def get_absolute_url(self, request = None):
+        set_id = self.submission.submission_set.id
+        return reverse('pro-manual-rate-detail', kwargs={'submission_set' : set_id},
+                       request = request)
 
 #Abstract class just to type the specific submissions as submissions
 class Submission(models.Model):

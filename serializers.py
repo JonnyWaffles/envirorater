@@ -25,7 +25,7 @@ def update_or_create_submissions_base_rating_units(base_rating_classes_data, sub
         try:
             unit = base_rating_classes.get(iso_code = unit_iso_code)
             for key in unit_data.keys():
-                attr = unit_data.pop(key, getattr(unit, key))
+                attr = unit_data.get(key, getattr(unit, key))
                 setattr(unit, key, attr[key])
            
           
@@ -55,8 +55,8 @@ def update_or_create_submissions_manual_rate(manual_rate_data, submission_instan
         submission_instance.manual_rate
         manual_rate = submission_instance.manual_rate
         for key in manual_rate_data.keys():
-            attr = manual_rate_data.pop(key, getattr(manual_rate, key))
-            setattr(manual_rate, key, attr[key])
+            attr = manual_rate_data.get(key, getattr(manual_rate, key))
+            setattr(manual_rate, key, attr)
     except ObjectDoesNotExist:
         #There has to be a better way to set which ManualRate class is used here
         #Originally I tried submission_instance.manual_rate.create(**manual_rate_data)
@@ -243,20 +243,26 @@ class ManualRateSerializerMixin(object):
         submission = validated_data.pop('submission')
         raw = validated_data.pop('raw', False)
 
-        instance = update_or_create_submissions_manual_rate(validated_data, submission, raw)
+        submission = update_or_create_submissions_manual_rate(validated_data, submission, raw)
 
-        instance.save()
+        instance = submission.manual_rate
 
         return instance
 
     def update(self, instance, validated_data):
+        
         raw = validated_data.pop('raw', False)
-        instance = update_or_create_submissions_manual_rate(validated_data, instance.submission, raw)
-
+        submission = update_or_create_submissions_manual_rate(validated_data, instance.submission, raw)
+        submission.get_manual_rate_total()
+        submission.save()
+        instance = submission.manual_rate
         instance.save()
-
+        
         return instance
-
+    
+    def get_url(self, instance):
+        return instance.get_absolute_url(self.context['request'])
+    
 class SubmissionSerializerMixin(object):
     def get_url(self, instance):
         return instance.get_absolute_url(self.context['request'])
@@ -336,12 +342,15 @@ class CPLSubmissionBaseRateSerializer(BaseRateSerializerMixin, serializers.Model
         
 class ProfessionalSubmissionBaseRateSerializer(BaseRateSerializerMixin, serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
+    
     class Meta:
         model = ProfessionalSubmissionBaseRate
         exclude = ('iso_factor', 'revenue_band_factor', 'submission', 'id')
         read_only_fields = ('premium', )
         
 class CPLSubmissionManualRateSerializer(ManualRateSerializerMixin, serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+    
     class Meta:
         model = CPLSubmissionManualRate
         exclude = ('limit_factor', 'deductible_factor', 'id',
@@ -349,6 +358,8 @@ class CPLSubmissionManualRateSerializer(ManualRateSerializerMixin, serializers.M
         read_only_fields = ('total_premium', )
 
 class ProfessionalSubmissionManualRateSerializer(ManualRateSerializerMixin, serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+    
     class Meta:
         model = ProfessionalSubmissionManualRate
         exclude = ('limit_factor', 'deductible_factor', 'aggregate_deductible_multiplier_factor',

@@ -3,12 +3,12 @@ from rest_framework import routers, serializers, viewsets
 from rest_framework.urlpatterns import format_suffix_patterns
 from rest_framework.documentation import include_docs_urls
 
-from .views import (Index, SubmissionSetViewSet, ContractorClassViewSet, ProfessionalClassViewSet,
+from .views import (SubmissionSetViewSet, ContractorClassViewSet, ProfessionalClassViewSet,
                     PremiumModifierAPI, UserViewSet, CPLSubmissionViewSet, ProfessionalSubmissionViewSet,
                     CPLBaseRatingUnitViewSet, CPLBaseRatingUnitViewSet, ProfessionalBaseRatingUnitViewSet,
                     ProfessionalRevenueBandViewSet, ContractorsPollutionRevenueBandViewSet, DeductibleViewSet,
                     PriorActsViewSet, AggregateViewSet, StateViewSet, NoseViewSet, LimitViewSet,
-                    api_root)
+                    CPLSubmissionManualRateViewSet, ProfessionalSubmissionManualRateViewSet, api_root)
 
 router = routers.SimpleRouter()
 
@@ -53,6 +53,18 @@ pro_units_detail = ProfessionalBaseRatingUnitViewSet.as_view({'get': 'retrieve',
                                                      'patch': 'partial_update',
                                                      'delete': 'destroy'})
 
+cpl_manual_rate_detail = CPLSubmissionManualRateViewSet.as_view({'get' : 'retrieve',
+                                                                 'post' : 'create',
+                                                                'put' : 'update',
+                                                                'patch' : 'partial_update',
+                                                                'delete' : 'destroy'})
+
+pro_manual_rate_detail = ProfessionalSubmissionManualRateViewSet.as_view({'get' : 'retrieve',
+                                                                          'post' : 'create',
+                                                                          'put' : 'update',
+                                                                          'patch' : 'partial_update',
+                                                                          'delete' : 'destroy'})
+
 urlpatterns = [
     url(r'^$', api_root),
     url(r'^', include(router.urls)),
@@ -64,4 +76,6 @@ urlpatterns = [
     url(r'submissions/(?P<submission_set>\d+)/pro/units$', pro_units_list, name='pro-units-list'), 
     url(r'submissions/(?P<submission_set>\d+)/cpl/units/(?P<iso_code>\d+)/', cpl_units_detail, name='cpl-units-detail'),
     url(r'submissions/(?P<submission_set>\d+)/pro/units/(?P<iso_code>\d+)/', pro_units_detail, name='pro-units-detail'),
+    url(r'submissions/(?P<submission_set>\d+)/cpl/manual_rate/', cpl_manual_rate_detail, name='cpl-manual-rate-detail'),
+    url(r'submissions/(?P<submission_set>\d+)/pro/manual_rate/', pro_manual_rate_detail, name='pro-manual-rate-detail'),
 ]
