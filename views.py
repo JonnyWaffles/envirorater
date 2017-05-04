@@ -115,8 +115,8 @@ class SubmissionSetViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
 		else:
 			serializer.save(owner = user)
 
-	def perform_update(self, serializer):
-		serializer.save(owner = user, raw = raw)
+	def perform_update(self, serializer):			
+		serializer.save()
 
 class CPLSubmissionViewSet(viewsets.ModelViewSet):
 	"""

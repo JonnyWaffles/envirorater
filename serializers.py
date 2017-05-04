@@ -26,7 +26,7 @@ def update_or_create_submissions_base_rating_units(base_rating_classes_data, sub
             unit = base_rating_classes.get(iso_code = unit_iso_code)
             for key in unit_data.keys():
                 attr = unit_data.get(key, getattr(unit, key))
-                setattr(unit, key, attr[key])
+                setattr(unit, key, attr)
            
           
         #If an instance matching the iso_code cannot be found, create a new one using the data.
@@ -292,18 +292,22 @@ class SubmissionSetSerializerMixin(object):
         
         #If performing a raw save without evaluation, such as for historical submission data, 
         #use the data's owner otherwise owner will be set by the view.
-        raw = validated_data.get("raw", False)
-
-        instance = SubmissionSet.objects.create(owner = validated_data.get("owner"))
+        raw = validated_data.get("raw", False)       
 
         if 'cpl_submission' in validated_data.keys():
             cpl_submission_data = validated_data.pop('cpl_submission')
+            
+        if 'professional_submission' in validated_data.keys():
+            professional_submission_data = validated_data.pop('professional_submission')
+            
+        instance = SubmissionSet.objects.create(**validated_data)
+            
+        if cpl_submission_data:
             instance.cpl_submission = update_or_create_submission(
                 cpl_submission_data, submission_set_instance = instance,
                 submission_type = CPLSubmission,  raw = raw)
             
-        if 'professional_submission' in validated_data.keys():
-            professional_submission_data = validated_data.pop('professional_submission')
+        if professional_submission_data:
             instance.professional_submission = update_or_create_submission(
                 professional_submission_data, submission_set_instance = instance,
                 submission_type = ProfessionalSubmission, raw = raw)     
@@ -327,6 +331,10 @@ class SubmissionSetSerializerMixin(object):
             update_or_create_submission(professional_submission_data,
                                         submission_instance = instance.professional_submission,
                                         raw = raw)
+            
+        for key in validated_data.keys():
+            attr = validated_data.get(key, getattr(instance, key))
+            setattr(instance, key, attr)        
 
         instance.save()
 
