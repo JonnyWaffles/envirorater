@@ -104,13 +104,13 @@ def update_or_create_submission(submission_data, submission_instance = None, sub
 
     if not submission_instance and not submission_type:
         raise ValueError('No submission instance was provided, therefore'
-                         'a submission_type and submission_set must be provided.')
+                         'a submission_type and submission_set_instance must be provided.')
 
     
 
     if not submission_instance and submission_type and not submission_set_instance:
         raise ValueError('No submission instance was provided, therefore'
-                         'a submission_type and submission_set must be provided.')
+                         'a submission_type and submission_set_instance must be provided.')
 
     if not submission_instance:
         submission_instance = submission_type.objects.create(submission_set = submission_set_instance)
@@ -292,13 +292,17 @@ class SubmissionSetSerializerMixin(object):
         
         #If performing a raw save without evaluation, such as for historical submission data, 
         #use the data's owner otherwise owner will be set by the view.
-        raw = validated_data.get("raw", False)       
+        raw = validated_data.pop("raw", False)       
 
         if 'cpl_submission' in validated_data.keys():
             cpl_submission_data = validated_data.pop('cpl_submission')
+        else:
+            cpl_submission_data = None
             
         if 'professional_submission' in validated_data.keys():
             professional_submission_data = validated_data.pop('professional_submission')
+        else:
+            professional_submission_data = None
             
         instance = SubmissionSet.objects.create(**validated_data)
             
@@ -318,19 +322,19 @@ class SubmissionSetSerializerMixin(object):
     
     def update(self, instance, validated_data):
         
-        raw = validated_data.get("raw", False)
+        raw = validated_data.pop("raw", False)
         
-        if 'cpl_submission' in validated_data.keys():
+        if validated_data.get('cpl_submission', None):
             cpl_submission_data = validated_data.pop('cpl_submission')
-            update_or_create_submission(cpl_submission_data,
+            update_or_create_submission(cpl_submission_data, submission_type = CPLSubmission,
                                         submission_instance = instance.cpl_submission,
-                                        raw = raw)
+                                        submission_set_instance = instance, raw = raw)
             
-        if 'professional_submission' in validated_data.keys():
+        if validated_data.get('professional_submission', None):
             professional_submission_data = validated_data.pop('professional_submission')
-            update_or_create_submission(professional_submission_data,
+            update_or_create_submission(professional_submission_data, submission_type = ProfessionalSubmission,
                                         submission_instance = instance.professional_submission,
-                                        raw = raw)
+                                        submission_set_instance = instance, raw = raw)
             
         for key in validated_data.keys():
             attr = validated_data.get(key, getattr(instance, key))
@@ -395,8 +399,8 @@ class ProfessionalSubmissionSerializer(SubmissionSerializerMixin, serializers.Mo
 class SubmissionSetSerializer(SubmissionSetSerializerMixin, serializers.ModelSerializer):
     insured_name = serializers.CharField(required = False)
     url = serializers.HyperlinkedIdentityField(view_name='submissions-detail')
-    cpl_submission = CPLSubmissionSerializer(required = False)
-    professional_submission = ProfessionalSubmissionSerializer(required = False)
+    cpl_submission = CPLSubmissionSerializer(required = False, allow_null = True)
+    professional_submission = ProfessionalSubmissionSerializer(required = False, allow_null = True)
     owner = UserSerializer(read_only = True)    
 
     class Meta:
