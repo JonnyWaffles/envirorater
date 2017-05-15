@@ -136,13 +136,16 @@ class CPLSubmissionViewSet(viewsets.ModelViewSet):
 
 	serializer_class = CPLSubmissionSerializer
 
-	def get_object(self):
+	def get_submission_set(self):
 		submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
+		return submission_set
+
+	def get_object(self):
+		submission_set = self.get_submission_set()
 		return submission_set.cpl_submission
 
-
 	def perform_update(self, serializer):
-		serializer.save(raw = self.request.data.get('raw', False))
+		serializer.save(submission_set = self.get_submission_set(), raw = self.request.data.get('raw', False))
 
 class ProfessionalSubmissionViewSet(viewsets.ModelViewSet):
 	"""	
@@ -161,13 +164,17 @@ class ProfessionalSubmissionViewSet(viewsets.ModelViewSet):
 	queryset = ProfessionalSubmission.objects.all()
 
 	serializer_class = ProfessionalSubmissionSerializer
+	
+	def get_submission_set(self):
+		submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
+		return submission_set
 
 	def get_object(self):
-		submission_set = get_object_or_404(SubmissionSet, id = self.kwargs['submission_set'])
+		submission_set = self.get_submission_set()
 		return submission_set.professional_submission
 
 	def perform_update(self, serializer):
-		serializer.save(raw = self.request.data.get('raw', False))
+		serializer.save(submission_set = self.get_submission_set(), raw = self.request.data.get('raw', False))
 		 
 class CPLBaseRatingUnitViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
 	"""

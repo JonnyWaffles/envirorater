@@ -111,6 +111,8 @@ def update_or_create_submission(submission_data, submission_instance = None, sub
     if not submission_instance and submission_type and not submission_set_instance:
         raise ValueError('No submission instance was provided, therefore'
                          'a submission_type and submission_set_instance must be provided.')
+        
+    print(submission_instance)
 
     if not submission_instance:
         submission_instance = submission_type.objects.create(submission_set = submission_set_instance)
@@ -326,13 +328,13 @@ class SubmissionSetSerializerMixin(object):
         
         if validated_data.get('cpl_submission', None):
             cpl_submission_data = validated_data.pop('cpl_submission')
-            update_or_create_submission(cpl_submission_data, submission_type = CPLSubmission,
+            instance.cpl_submission = update_or_create_submission(cpl_submission_data, submission_type = CPLSubmission,
                                         submission_instance = instance.cpl_submission,
                                         submission_set_instance = instance, raw = raw)
             
         if validated_data.get('professional_submission', None):
             professional_submission_data = validated_data.pop('professional_submission')
-            update_or_create_submission(professional_submission_data, submission_type = ProfessionalSubmission,
+            instance.professional_submission = update_or_create_submission(professional_submission_data, submission_type = ProfessionalSubmission,
                                         submission_instance = instance.professional_submission,
                                         submission_set_instance = instance, raw = raw)
             
