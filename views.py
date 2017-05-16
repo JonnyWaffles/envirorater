@@ -34,7 +34,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.exceptions import APIException, ValidationError
 from rest_framework import authentication, permissions
-from rest_framework import status
+from rest_framework import status, filters
 from rest_framework.reverse import reverse
 from rest_framework import viewsets
 from rest_framework.serializers import ListSerializer
@@ -100,7 +100,9 @@ class SubmissionSetViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
 	queryset = SubmissionSet.objects.all().order_by('-id')
 	serializer_class = SubmissionSetSerializer
 	permission_classes = (permissions.AllowAny, )
-
+	filter_backends = (filters.SearchFilter, )
+	search_fields = ['insured_name', ]
+	
 	def perform_create(self, serializer):
 		
 		user = self.request.user
@@ -359,6 +361,9 @@ class ContractorClassViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
 	queryset = ContractorClass.objects.all()
 	serializer_class = ContractorClassSerializer
 	lookup_field = 'iso_code'
+	
+	filter_backends = (filters.SearchFilter, )
+	search_fields = ['iso_description', ]
     
 class ProfessionalClassViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
 	"""
@@ -383,6 +388,9 @@ class ProfessionalClassViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
 	queryset = ProfessionalClass.objects.all()
 	serializer_class = ProfessionalClassSerializer
 	lookup_field = 'iso_code'
+	
+	filter_backends = (filters.SearchFilter, )
+	search_fields = ['iso_description', ]
 
 class ProfessionalRevenueBandViewSet(BulkCreateModelMixin, viewsets.ModelViewSet):
 	"""
